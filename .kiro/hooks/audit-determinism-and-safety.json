@@ -1,0 +1,19 @@
+{
+  "name": "Audit Determinism, Strict Healthy Vaccination & AWS Shift-Left Safety",
+  "version": "1.0.0",
+  "description": "Verifica automáticamente que se conserve DEFAULT_LAMBDA_URL, cero llamadas a Math.random(), cero violaciones a la regla de vacunar únicamente a población Sana, cero credenciales expuestas y cumplimiento IaC en infra/template.yaml.",
+  "enabled": true,
+  "trigger": {
+    "type": "onFileSave",
+    "patterns": [
+      "src/**/*.js",
+      "src/**/*.html",
+      "infra/**/*.py",
+      "infra/template.yaml"
+    ]
+  },
+  "action": {
+    "type": "agentPrompt",
+    "prompt": "Ejecuta una auditoría rápida de integridad sobre los archivos modificados verificando: (1) que src/app.js mantenga intacta DEFAULT_LAMBDA_URL = 'https://sw5fdgyzewlgqjttz2jhjkvaey0udlbt.lambda-url.us-east-2.on.aws/' y no contenga llamadas ejecutables a Math.random(); (2) que infra/lambda_simulador.py mantenga 0 violaciones a la regla estricta de vacunar únicamente a población Sana (S) y produzca el mismo HashFirma FNV-1a en ejecución simple y en Fan-Out de 5 workers; y (3) que infra/template.yaml preserve bloqueo público total en S3, cifrado KMS en S3/DynamoDB/Logs y permisos IAM de mínimo privilegio compatibles con Checkov."
+  }
+}

@@ -1,0 +1,84 @@
+name: Shift-Left Cloud Security & Determinism Gate (Checkov)
+
+on:
+  push:
+    branches: [ main, master, "**" ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  checkov-iac-security:
+    name: 🛡️ Checkov IaC Scan (infra/template.yaml)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Checkov on AWS SAM / CloudFormation Infrastructure
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra/
+          framework: cloudformation,sam
+          quiet: true
+          soft_fail: false
+          output_format: cli,sarif
+          output_file_path: console,results.sarif
+
+      - name: Upload SARIF Security Report to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: results.sarif
+
+  determinism-and-strict-rule-audit:
+    name: 🧬 Verify Seed Determinism, Fan-Out Hash & Healthy-Only Rule
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Audit JS PRNG Safety, Default Lambda URL & Python Fan-Out Invariants
+        run: |
+          python - << 'EOF'
+          import json, os, re, sys
+          os.environ["SKIP_AWS_IO"] = "1"
+          sys.path.insert(0, "infra")
+          import lambda_simulador as ls
+
+          with open("src/app.js", "r", encoding="utf-8") as f:
+              js = f.read()
+
+          assert 'DEFAULT_LAMBDA_URL = "https://sw5fdgyzewlgqjttz2jhjkvaey0udlbt.lambda-url.us-east-2.on.aws/"' in js
+          js_clean = re.sub(r'//.*', '', re.sub(r'/\*[\s\S]*?\*/', '', js))
+          assert "Math.random(" not in js_clean, "Forbidden Math.random() detected!"
+
+          payload = {"seed": 2026, "runs": 50, "days": 60, "beta": 0.72, "vaccines": 24000, "vaccineEffectiveness": 85, "initialNode": 6, "budget": 50000}
+          single = json.loads(ls.lambda_handler({"body": json.dumps(payload)}, None)["body"])
+          assert all(single["summary"][k]["violations"] == 0 for k in ("none", "random", "shield"))
+
+          seeds = ls.derive_sub_seeds(2026, 50)
+          fnv = 0x811C9DC5
+          for w in range(5):
+              wp = dict(payload, subSeeds=seeds[w*10:(w+1)*10], runs=10, workerIndex=w, totalWorkers=5)
+              sh = json.loads(ls.lambda_handler({"body": json.dumps(wp)}, None)["body"])["shardRaw"]
+              for i in range(10):
+                  for k in ("none", "random", "shield"):
+                      for val in (sh[k]["infected"][i], sh[k]["doses"][i], sh[k]["spent"][i]):
+                          for shift in (0, 8, 16):
+                              fnv ^= (val >> shift) & 0xFF
+                              fnv = ls.imul32(fnv, 0x01000193)
+
+          assert single["hashHex"] == f"0x{fnv:08X}", "Fan-Out Hash mismatch!"
+          print("All determinism, strict-vaccination, and Fan-Out hash checks PASSED:", single["hashHex"])
+          EOF

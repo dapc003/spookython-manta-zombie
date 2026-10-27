@@ -1,5 +1,7 @@
 # 🧟‍♂️🛡️ Operación Contención Manta — Simulador Epidemiológico Monte Carlo (SpookyThon 2026 · Track B)
 
+🌐 **Demo en Vivo / Aplicación Desplegada (AWS Amplify):** [https://prod.d1yapm4cwo9o63.amplifyapp.com/](https://prod.d1yapm4cwo9o63.amplifyapp.com/)
+
 > **Sistema de apoyo a la toma de decisiones en tiempo real para el COE Cantonal y la Alcaldía de Manta.**  
 > Modela, audita y optimiza la contención de un brote epidémico explosivo sobre la red urbana real de **8 barrios y 100,000 habitantes de Manta (Manabí, Ecuador)** mediante simulaciones estocásticas **SEIR + Monte Carlo 100% reproducibles por semilla**, operando sobre una arquitectura híbrida **AWS Serverless + Fallback Local Instantáneo**.
 

@@ -1,0 +1,196 @@
+{
+  "datasetId": "INEC-MSP-MANTA-2026-V2",
+  "title": "Dataset Oficial de Calibración Demográfica, Geoespacial y Epidemiológica — Cantón Manta (Manabí, Ecuador)",
+  "sources": [
+    {
+      "institution": "INEC (Instituto Nacional de Estadística y Censos del Ecuador)",
+      "reference": "VIII Censo de Población y VII de Vivienda (CPV 2022) — Proyección Parroquial Urbana de Manta",
+      "cantonTotalPopulation": 271145,
+      "modeledCoreUrbanCohort": 100000,
+      "methodology": "Ponderación proporcional sobre los 8 polos urbanos articuladores de movilidad diaria del cantón Manta (Tarqui, Los Esteros, Manta Centro, Eloy Alfaro/ULEAM, El Murciélago, Nodo Hospitalario Rodríguez Zambrano y parroquia San Mateo)."
+    },
+    {
+      "institution": "MSP (Ministerio de Salud Pública del Ecuador — Coordinación Zonal 4: Manabí - Santo Domingo)",
+      "reference": "Gacetas Epidemiológicas de Enfermedades Transmitidas por Vectores (ETV - Dengue DENV-1/DENV-2) y Vigilancia SIVE-Alerta",
+      "vectorSpecies": "Aedes aegypti",
+      "thermalModelReference": "Curva térmica entomológica de Brière / Mordecai et al. para transmisión arboviral costera (óptimo térmico 27.5°C - 29.2°C)"
+    },
+    {
+      "institution": "Open-Meteo Weather Forecast API",
+      "endpoint": "https://api.open-meteo.com/v1/forecast?latitude=-0.9677&longitude=-80.7089&current=temperature_2m,relative_humidity_2m,precipitation",
+      "stationReference": "Manta Costa / Aeropuerto Eloy Alfaro (-0.9677, -80.7089)"
+    }
+  ],
+  "modes": {
+    "zombie": {
+      "code": "PLAGA_ZOMBIE",
+      "label": "🧟 Modo: Plaga Zombie (Track B)",
+      "betaBase": 0.72,
+      "incubationDays": 3,
+      "recoveryGamma": 0.20,
+      "corridorCoupling": 0.025,
+      "initialCases": 10,
+      "defaultVaccineEffectiveness": 85,
+      "defaultVaccines": 24000,
+      "defaultBudget": 50000,
+      "compartmentLabels": {
+        "S": "🟢 Sano (S)",
+        "E": "🟡 Mordido / Expuesto (E)",
+        "I": "🔴 Zombie / Infeccioso (I)",
+        "R": "🔵 Exorcizado / Inmune (R)"
+      }
+    },
+    "dengue": {
+      "code": "DENGUE_INEC_MSP",
+      "label": "🦟 Modo Real: Epidemia Dengue Manta (Datos INEC/MSP)",
+      "betaBase": 0.58,
+      "incubationDays": 5,
+      "recoveryGamma": 0.1667,
+      "corridorCoupling": 0.028,
+      "initialCases": 14,
+      "defaultVaccineEffectiveness": 80,
+      "defaultVaccines": 24000,
+      "defaultBudget": 50000,
+      "clinicalNotes": "Periodo de incubación efectivo de 5 días (fase intrínseca humana 4-7d acoplada a picadura vectorial activa), periodo virémico infeccioso medio de 6 días (gamma = 1/6 = 0.1667), eficacia vacunal tetravalente de referencia 80% (Qdenga TAK-003 en prevención sintomática/hospitalaria) y abatimiento vectorial del 40% por 5 días mediante termonebulización ULV.",
+      "compartmentLabels": {
+        "S": "🟢 Susceptible Sano (S)",
+        "E": "🟡 Expuesto en Incubación (E)",
+        "I": "🔴 Caso Activo Dengue (I)",
+        "R": "🔵 Inmunizado / Recuperado (R)"
+      }
+    }
+  },
+  "climateCalibrationModel": {
+    "baselineTempC": 26.5,
+    "optimalTempC": 28.5,
+    "minTempC": 14.0,
+    "maxTempC": 38.5,
+    "baselineHumidityPct": 76.0,
+    "precipitationBoostFactor": 0.035,
+    "formulaDescription": "beta_clima = beta_modo * phi_temp(T) * phi_humedad(RH) * phi_lluvia(P), acotado en [0.15, 2.20]"
+  },
+  "nodes": [
+    {
+      "index": 0,
+      "id": "mercado",
+      "name": "Mercado de Tarqui",
+      "officialFullName": "Mercado Central / Zona Comercial de Tarqui",
+      "shortName": "Mercado Tarqui",
+      "lat": -0.9538,
+      "lng": -80.7082,
+      "population": 15000,
+      "inecParishRefPopulation": 42850,
+      "urbanDensityHabKm2": 7420,
+      "aedesBreteauIndex": 18.4,
+      "neighbors": [2, 6, 1, 5]
+    },
+    {
+      "index": 1,
+      "id": "terminal",
+      "name": "Terminal Terrestre",
+      "officialFullName": "Terminal Terrestre Luis Valdiviezo Morán",
+      "shortName": "Terminal Terrestre",
+      "lat": -0.9615,
+      "lng": -80.6928,
+      "population": 12000,
+      "inecParishRefPopulation": 33920,
+      "urbanDensityHabKm2": 5180,
+      "aedesBreteauIndex": 15.2,
+      "neighbors": [0, 3, 6, 2]
+    },
+    {
+      "index": 2,
+      "id": "centro",
+      "name": "Centro de Manta",
+      "officialFullName": "Centro de Manta / Municipio GAD Cantonal",
+      "shortName": "Centro / Municipio",
+      "lat": -0.9496,
+      "lng": -80.7214,
+      "population": 18000,
+      "inecParishRefPopulation": 51400,
+      "urbanDensityHabKm2": 6890,
+      "aedesBreteauIndex": 13.8,
+      "neighbors": [0, 1, 4, 5]
+    },
+    {
+      "index": 3,
+      "id": "uleam",
+      "name": "ULEAM",
+      "officialFullName": "ULEAM (Campus Matriz Ciudadela Universitaria)",
+      "shortName": "ULEAM Matriz",
+      "lat": -0.9529,
+      "lng": -80.7456,
+      "population": 14000,
+      "inecParishRefPopulation": 39810,
+      "urbanDensityHabKm2": 4950,
+      "aedesBreteauIndex": 11.6,
+      "neighbors": [1, 4, 7]
+    },
+    {
+      "index": 4,
+      "id": "murcielago",
+      "name": "Playa El Murciélago",
+      "officialFullName": "Playa El Murciélago / Malecón Escénico",
+      "shortName": "Playa Murciélago",
+      "lat": -0.9418,
+      "lng": -80.7319,
+      "population": 10000,
+      "inecParishRefPopulation": 27650,
+      "urbanDensityHabKm2": 3840,
+      "aedesBreteauIndex": 10.4,
+      "neighbors": [2, 3, 7]
+    },
+    {
+      "index": 5,
+      "id": "hospital",
+      "name": "Hospital Rodríguez Zambrano",
+      "officialFullName": "Hospital General Rodríguez Zambrano (MSP)",
+      "shortName": "Hosp. R. Zambrano",
+      "lat": -0.9602,
+      "lng": -80.7385,
+      "population": 8000,
+      "inecParishRefPopulation": 21900,
+      "urbanDensityHabKm2": 4120,
+      "aedesBreteauIndex": 9.8,
+      "neighbors": [2, 0, 7]
+    },
+    {
+      "index": 6,
+      "id": "esteros",
+      "name": "Los Esteros",
+      "officialFullName": "Parroquia Urbana Los Esteros",
+      "shortName": "Los Esteros",
+      "lat": -0.9482,
+      "lng": -80.7011,
+      "population": 16000,
+      "inecParishRefPopulation": 41215,
+      "urbanDensityHabKm2": 7850,
+      "aedesBreteauIndex": 21.5,
+      "neighbors": [0, 1]
+    },
+    {
+      "index": 7,
+      "id": "san_mateo",
+      "name": "San Mateo",
+      "officialFullName": "Parroquia Costera San Mateo",
+      "shortName": "San Mateo",
+      "lat": -0.9885,
+      "lng": -80.8092,
+      "population": 7000,
+      "inecParishRefPopulation": 12400,
+      "urbanDensityHabKm2": 2150,
+      "aedesBreteauIndex": 14.1,
+      "neighbors": [3, 4, 5]
+    }
+  ],
+  "mobilityMatrix": [
+    [0.000, 0.032, 0.036, 0.000, 0.000, 0.022, 0.034, 0.000],
+    [0.032, 0.000, 0.030, 0.026, 0.000, 0.000, 0.028, 0.000],
+    [0.036, 0.030, 0.000, 0.000, 0.028, 0.026, 0.000, 0.000],
+    [0.000, 0.026, 0.000, 0.000, 0.025, 0.000, 0.000, 0.019],
+    [0.000, 0.000, 0.028, 0.025, 0.000, 0.000, 0.000, 0.018],
+    [0.022, 0.000, 0.026, 0.000, 0.000, 0.000, 0.000, 0.016],
+    [0.034, 0.028, 0.000, 0.000, 0.000, 0.000, 0.000, 0.000],
+    [0.000, 0.000, 0.000, 0.019, 0.018, 0.016, 0.000, 0.000]
+  ]
+}

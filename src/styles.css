@@ -1475,3 +1475,541 @@ input[type="range"] {
     padding-right: 14px;
   }
 }
+
+
+/* ============================================================================
+   EXTENSIÓN MULTICAPA AWS: MODO DUAL, OPEN-METEO, FAN-OUT, LEAFLET Y DYNAMODB
+   ============================================================================ */
+.hidden {
+  display: none !important;
+}
+
+.section-mini-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+  margin-bottom: 7px;
+}
+
+/* BARRA SUPERIOR: MODO ZOMBIE <-> DENGUE INEC/MSP + CLIMA REAL OPEN-METEO */
+.mode-climate-panel {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 18px;
+  align-items: center;
+  border-color: rgba(6, 214, 160, 0.32);
+  background: linear-gradient(135deg, rgba(10, 20, 38, 0.95), rgba(14, 25, 46, 0.92));
+}
+
+.mode-toggle-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: rgba(6, 10, 19, 0.85);
+  padding: 5px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.mode-switch-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: "Inter", sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.mode-switch-btn:hover {
+  color: #ffffff;
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.mode-switch-btn[data-epi-mode="zombie"].active {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.24), rgba(168, 85, 247, 0.2));
+  border-color: rgba(239, 68, 68, 0.55);
+  color: #fecaca;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.2);
+}
+
+.mode-switch-btn[data-epi-mode="dengue"].active {
+  background: linear-gradient(135deg, rgba(6, 214, 160, 0.24), rgba(56, 189, 248, 0.22));
+  border-color: rgba(6, 214, 160, 0.55);
+  color: #a7f3d0;
+  box-shadow: 0 0 16px rgba(6, 214, 160, 0.2);
+}
+
+.mode-helper-text {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* WIDGET OPEN-METEO EN TIEMPO REAL */
+.weather-live-widget {
+  background: rgba(7, 13, 25, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+
+.weather-widget-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.weather-title-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: #e2e8f0;
+}
+
+.weather-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #06d6a0;
+  box-shadow: 0 0 9px #06d6a0;
+}
+
+.weather-coords-tag {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.btn-weather {
+  background: linear-gradient(135deg, #0284c7, #0d9488);
+  color: #ffffff;
+  border: 1px solid rgba(125, 211, 252, 0.45);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-weather:hover {
+  filter: brightness(1.1);
+}
+
+.weather-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weather-chip {
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  padding: 6px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.weather-chip-highlight {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.w-label {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.w-val {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13.5px;
+  color: #f8fafc;
+}
+
+/* FAN-OUT 5 WORKERS PILL */
+.cloud-pills-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.parallel-workers-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fde68a;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.2), rgba(6, 214, 160, 0.18));
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.2);
+}
+
+/* BARRA RÁPIDA: BROTE SORPRESA DEL JURADO + AUTO-OPTIMIZADOR */
+.quick-surprise-bar {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: linear-gradient(145deg, rgba(28, 17, 36, 0.88), rgba(12, 20, 38, 0.95));
+  padding: 16px 20px;
+}
+
+.quick-surprise-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 13px;
+}
+
+.btn-optimizer {
+  background: linear-gradient(135deg, #7c3aed, #06b6d4, #059669);
+  color: #ffffff;
+  border: 1px solid rgba(167, 139, 250, 0.65);
+  border-radius: var(--radius-md);
+  padding: 10px 18px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.35);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.btn-optimizer:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+.quick-challenge-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.btn-challenge {
+  background: rgba(15, 23, 42, 0.92);
+  color: #fde68a;
+  border: 1px solid rgba(245, 158, 11, 0.38);
+  border-radius: 9px;
+  padding: 8px 13px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.btn-challenge:hover {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: #fbbf24;
+  color: #ffffff;
+}
+
+.btn-challenge-reset {
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.optimizer-banner {
+  margin-top: 12px;
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(6, 214, 160, 0.12);
+  border: 1px solid rgba(6, 214, 160, 0.45);
+  color: #d1fae5;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* MAPA GEOESPACIAL LEAFLET + CARTODB DARK MATTER */
+.map-header-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.geo-map-wrapper {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  background: #070d19;
+}
+
+.manta-leaflet-canvas {
+  width: 100%;
+  height: 455px;
+  background: #070d19;
+  z-index: 1;
+}
+
+.geo-map-overlay-legend {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 450;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 11px;
+  border-radius: 8px;
+  background: rgba(6, 10, 19, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  font-size: 11px;
+  color: #e2e8f0;
+  pointer-events: none;
+}
+
+/* Personalización oscura para Popups y Tooltips de Leaflet */
+.leaflet-container {
+  font-family: "Inter", sans-serif;
+  background: #070d19;
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: rgba(9, 16, 31, 0.96);
+  color: #f1f5f9;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.75);
+}
+
+.leaflet-popup-content {
+  margin: 11px 13px;
+  line-height: 1.45;
+}
+
+.tactical-popup-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 3px;
+}
+
+.tactical-popup-coords {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  color: #7dd3fc;
+  margin-bottom: 7px;
+}
+
+.tactical-popup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.9);
+  margin-bottom: 6px;
+}
+
+.tactical-popup-foot {
+  font-size: 11px;
+  color: #a7f3d0;
+}
+
+.manta-geo-label {
+  background: rgba(6, 10, 19, 0.86) !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
+  color: #f8fafc !important;
+  font-family: "JetBrains Mono", monospace !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  padding: 2px 6px !important;
+  border-radius: 5px !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5) !important;
+}
+
+.manta-geo-label::before {
+  display: none !important;
+}
+
+/* TABLA DE AUDITORÍA DYNAMODB */
+.dynamo-panel {
+  border-color: rgba(167, 139, 250, 0.32);
+}
+
+.empty-row {
+  text-align: center !important;
+  color: var(--text-secondary);
+  padding: 16px !important;
+}
+
+.hash-code-pill {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #7dd3fc;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+}
+
+.mode-audit-pill {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.mode-audit-zombie {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.mode-audit-dengue {
+  background: rgba(6, 214, 160, 0.16);
+  color: #6ee7b7;
+  border: 1px solid rgba(6, 214, 160, 0.35);
+}
+
+/* ACORDEÓN CIENTÍFICO DESPLEGABLE (INEC / MSP / OPEN-METEO) */
+.scientific-drawer {
+  padding: 0;
+  overflow: hidden;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.scientific-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(11, 20, 38, 0.9);
+  transition: background 0.16s ease;
+}
+
+.scientific-summary::-webkit-details-marker {
+  display: none;
+}
+
+.scientific-summary:hover {
+  background: rgba(16, 28, 52, 0.95);
+}
+
+.sci-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sci-icon {
+  font-size: 22px;
+}
+
+.sci-summary-left strong {
+  display: block;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 15.5px;
+  color: #f8fafc;
+}
+
+.sci-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.sci-chevron {
+  font-size: 18px;
+  color: var(--accent-cyan);
+  transition: transform 0.2s ease;
+}
+
+.scientific-drawer[open] .sci-chevron {
+  transform: rotate(180deg);
+}
+
+.scientific-content {
+  padding: 18px 20px 20px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.sci-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sci-card {
+  background: rgba(9, 16, 31, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.sci-card h3 {
+  margin: 0 0 8px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 14px;
+  color: #7dd3fc;
+}
+
+.sci-card p {
+  margin: 0 0 8px;
+  font-size: 12.2px;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.sci-card p:last-child {
+  margin-bottom: 0;
+}
+
+.sci-formula {
+  margin: 8px 0;
+  padding: 9px 11px;
+  border-radius: 7px;
+  background: #060a13;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  color: #6ee7b7;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+@media (max-width: 1120px) {
+  .mode-climate-panel,
+  .sci-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .weather-metrics-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .manta-leaflet-canvas {
+    height: 360px;
+  }
+}

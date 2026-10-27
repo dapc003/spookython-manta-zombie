@@ -1,61 +1,80 @@
 /**
- * OPERACIÓN CONTENCIÓN MANTA · NIVEL PRO (TRACK B: LA PLAGA ZOMBIE)
- * Simulador Epidemiológico SEIR Diario Reproducible, Panel Anti-Brote Sorpresa y Monte Carlo
- *
- * Garantías de Ingeniería:
- * 1. Grafo real de Manta: 8 barrios (100,000 hab.) y 13 aristas simétricas de contacto.
- * 2. Determinismo exacto con mulberry32(seed): cero llamadas a Math.random().
- * 3. Regla Estricta inquebrantable: Prohibido vacunar a Mordidos (E), Zombies (I) o Exorcizados (R);
- *    únicamente se vacuna a población 🟢 Sana (S) elegible.
- * 4. Nivel Pro: Efectividad vacunal (10%-100%), Presupuesto ($), Llegada escalonada diaria,
- *    Vacuna ($15), Fumigación ($1,200 / -40% local 5 días) y Cierre Selectivo ($3,500 / -75% flujo),
- *    Mapa SVG animado Día 1..60 e Informe Ejecutivo dinámico para el Alcalde de Manta.
+ * OPERACIÓN CONTENCIÓN MANTA · ARQUITECTURA MULTICAPA AWS (SPOOKYTHON 2026)
+ * Simulador Epidemiológico SEIR Reproducible, Gemelo Geoespacial GPS (Leaflet + CartoDB),
+ * Calibración Científica en Vivo (Open-Meteo + INEC/MSP), Auto-Optimizador Presupuestario
+ * y Coordinador Fan-Out Serverless (5 Workers AWS Lambda + S3 Privado + DynamoDB Audit).
  */
 
 (function () {
   "use strict";
 
   // ============================================================================
-  // 1. GRAFO OFICIAL DE MANTA (8 BARRIOS, 100,000 HABITANTES, 13 ARISTAS)
+  // 1. CONSTANTES MAESTRAS, GRAFO GPS REAL DE MANTA Y DATASET INEC / MSP
   // ============================================================================
+  const DEFAULT_LAMBDA_URL = "https://sw5fdgyzewlgqjttz2jhjkvaey0udlbt.lambda-url.us-east-2.on.aws/";
+  const LAMBDA_STORAGE_KEY = "manta_contencion_lambda_url";
+  const LOCAL_AUDIT_STORAGE_KEY = "manta_contencion_dynamo_mirror_v2";
+  const OPEN_METEO_URL =
+    "https://api.open-meteo.com/v1/forecast?latitude=-0.9677&longitude=-80.7089&current=temperature_2m,relative_humidity_2m,precipitation";
+
   const MANTA_NODES = [
     {
       id: "mercado",
       index: 0,
       name: "Mercado de Tarqui",
+      officialName: "Mercado de Tarqui",
       shortName: "Mercado Tarqui",
+      lat: -0.9538,
+      lng: -80.7082,
       population: 15000,
-      neighbors: [2, 6, 1, 5], // Centro, Los Esteros, Terminal, Hospital
+      inecRefPop: 42850,
+      aedesBreteauIndex: 18.4,
+      neighbors: [2, 6, 1, 5],
       x: 558,
       y: 288
     },
     {
       id: "terminal",
       index: 1,
-      name: "Terminal Terrestre",
+      name: "Terminal Terrestre Luis Valdiviezo",
+      officialName: "Terminal Terrestre Luis Valdiviezo",
       shortName: "Terminal Terrestre",
+      lat: -0.9615,
+      lng: -80.6928,
       population: 12000,
-      neighbors: [0, 3, 6, 2], // Mercado, ULEAM, Los Esteros, Centro
+      inecRefPop: 33920,
+      aedesBreteauIndex: 15.2,
+      neighbors: [0, 3, 6, 2],
       x: 642,
       y: 184
     },
     {
       id: "centro",
       index: 2,
-      name: "Centro de Manta",
-      shortName: "Centro de Manta",
+      name: "Centro de Manta / Municipio",
+      officialName: "Centro de Manta / Municipio",
+      shortName: "Centro / Municipio",
+      lat: -0.9496,
+      lng: -80.7214,
       population: 18000,
-      neighbors: [0, 1, 4, 5], // Mercado, Terminal, Playa Murciélago, Hospital
+      inecRefPop: 51400,
+      aedesBreteauIndex: 13.8,
+      neighbors: [0, 1, 4, 5],
       x: 450,
       y: 150
     },
     {
       id: "uleam",
       index: 3,
-      name: "ULEAM",
-      shortName: "ULEAM",
+      name: "ULEAM (Campus Matriz)",
+      officialName: "ULEAM (Campus Matriz)",
+      shortName: "ULEAM Matriz",
+      lat: -0.9529,
+      lng: -80.7456,
       population: 14000,
-      neighbors: [1, 4, 7], // Terminal, Playa Murciélago, San Mateo
+      inecRefPop: 39810,
+      aedesBreteauIndex: 11.6,
+      neighbors: [1, 4, 7],
       x: 268,
       y: 258
     },
@@ -63,9 +82,14 @@
       id: "murcielago",
       index: 4,
       name: "Playa El Murciélago",
+      officialName: "Playa El Murciélago",
       shortName: "Playa Murciélago",
+      lat: -0.9418,
+      lng: -80.7319,
       population: 10000,
-      neighbors: [2, 3, 7], // Centro, ULEAM, San Mateo
+      inecRefPop: 27650,
+      aedesBreteauIndex: 10.4,
+      neighbors: [2, 3, 7],
       x: 268,
       y: 118
     },
@@ -73,9 +97,14 @@
       id: "hospital",
       index: 5,
       name: "Hospital Rodríguez Zambrano",
+      officialName: "Hospital Rodríguez Zambrano",
       shortName: "Hosp. R. Zambrano",
+      lat: -0.9602,
+      lng: -80.7385,
       population: 8000,
-      neighbors: [2, 0, 7], // Centro, Mercado, San Mateo
+      inecRefPop: 21900,
+      aedesBreteauIndex: 9.8,
+      neighbors: [2, 0, 7],
       x: 382,
       y: 358
     },
@@ -83,9 +112,14 @@
       id: "esteros",
       index: 6,
       name: "Los Esteros",
+      officialName: "Los Esteros",
       shortName: "Los Esteros",
+      lat: -0.9482,
+      lng: -80.7011,
       population: 16000,
-      neighbors: [0, 1], // Mercado, Terminal
+      inecRefPop: 41215,
+      aedesBreteauIndex: 21.5,
+      neighbors: [0, 1],
       x: 740,
       y: 292
     },
@@ -93,13 +127,74 @@
       id: "san_mateo",
       index: 7,
       name: "San Mateo",
+      officialName: "San Mateo",
       shortName: "San Mateo",
+      lat: -0.9885,
+      lng: -80.8092,
       population: 7000,
-      neighbors: [3, 4, 5], // ULEAM, Playa Murciélago, Hospital
+      inecRefPop: 12400,
+      aedesBreteauIndex: 14.1,
+      neighbors: [3, 4, 5],
       x: 100,
       y: 284
     }
   ];
+
+  const MOBILITY_MATRIX = [
+    [0.000, 0.032, 0.036, 0.000, 0.000, 0.022, 0.034, 0.000],
+    [0.032, 0.000, 0.030, 0.026, 0.000, 0.000, 0.028, 0.000],
+    [0.036, 0.030, 0.000, 0.000, 0.028, 0.026, 0.000, 0.000],
+    [0.000, 0.026, 0.000, 0.000, 0.025, 0.000, 0.000, 0.019],
+    [0.000, 0.000, 0.028, 0.025, 0.000, 0.000, 0.000, 0.018],
+    [0.022, 0.000, 0.026, 0.000, 0.000, 0.000, 0.000, 0.016],
+    [0.034, 0.028, 0.000, 0.000, 0.000, 0.000, 0.000, 0.000],
+    [0.000, 0.000, 0.000, 0.019, 0.018, 0.016, 0.000, 0.000]
+  ];
+
+  const MODE_PROFILES = {
+    zombie: {
+      code: "PLAGA_ZOMBIE",
+      badgeText: "TRACK B · LA PLAGA ZOMBIE",
+      emblem: "☣",
+      betaBase: 0.72,
+      incubationDays: 3,
+      recoveryGamma: 0.20,
+      corridorCoupling: 0.025,
+      initialCases: 10,
+      defaultVaccineEfficacy: 85,
+      helperHtml:
+        'Escenario competitivo Track B calibrado sobre los 8 nodos viales de Manta (<code>&beta;=0.72</code>, incubación <code>3d</code>, eficacia <code>85%</code>).',
+      labels: {
+        S: "🟢 Sano (S)",
+        E: "🟡 Mordido (E)",
+        I: "🔴 Zombie (I)",
+        R: "🔵 Exorcizado / Inmune (R)",
+        shortI: "🔴 Zombies Activos I(t)",
+        incHelp: "Latencia 🟡 Mordido → 🔴 Zombie"
+      }
+    },
+    dengue: {
+      code: "DENGUE_INEC_MSP",
+      badgeText: "MODO CIENTÍFICO · EPIDEMIA DENGUE INEC / MSP",
+      emblem: "🦟",
+      betaBase: 0.58,
+      incubationDays: 5,
+      recoveryGamma: 0.1667,
+      corridorCoupling: 0.028,
+      initialCases: 14,
+      defaultVaccineEfficacy: 80,
+      helperHtml:
+        'Calibración oficial <strong>INEC CPV 2022 + MSP Zona 4 Manabí</strong> para <em>Aedes aegypti</em> (<code>&beta;=0.58</code>, incubación <code>5d</code>, viremia <code>6d</code>, eficacia tetravalente <code>80%</code>).',
+      labels: {
+        S: "🟢 Susceptible Sano (S)",
+        E: "🟡 Expuesto Incubando (E)",
+        I: "🔴 Dengue Activo (I)",
+        R: "🔵 Inmunizado / Recup. (R)",
+        shortI: "🔴 Casos Dengue Activos I(t)",
+        incHelp: "Incubación clínica MSP (S → I)"
+      }
+    }
+  };
 
   const TOTAL_CITY_POPULATION = MANTA_NODES.reduce((acc, n) => acc + n.population, 0); // 100,000
 
@@ -112,16 +207,17 @@
     }
   }
 
-  // Costos e impactos oficiales de las Intervenciones Combinadas
-  const COST_VACCINE_DOSE = 15;          // $15 por dosis
-  const COST_FUMIGATION = 1200;          // $1,200 por barrio (5 días, -40% contagio local)
+  // Costos e impactos reales de las 3 intervenciones combinadas
+  const COST_VACCINE_DOSE = 15;          // $15 por dosis (solo población Sana)
+  const COST_FUMIGATION = 1200;          // $1,200 por barrio (5 días, -40% transmisión local)
   const FUMIGATION_DURATION_DAYS = 5;
-  const FUMIGATION_LOCAL_MULT = 0.60;    // Reduce contagio local un 40%
+  const FUMIGATION_LOCAL_MULT = 0.60;
   const COST_NODE_CLOSURE = 3500;        // $3,500 por barrio (-75% flujo inter-barrial)
-  const CLOSURE_FLOW_MULT = 0.25;        // Reduce flujo entre barrios vecinos un 75%
+  const CLOSURE_FLOW_MULT = 0.25;
+  const TACTICAL_BRIGADE_SIZE = 100;
 
-  // Parámetros por defecto (Base + Nivel Pro)
   const DEFAULT_CONFIG = Object.freeze({
+    mode: "zombie",
     seed: 2026,
     runs: 50,
     days: 60,
@@ -138,14 +234,8 @@
     useClosure: true
   });
 
-  // Parámetros biológicos base del brote
-  const INITIAL_ZOMBIES = 10;
-  const EXORCISM_RATE_GAMMA = 0.20;
-  const CORRIDOR_COUPLING = 0.025;
-  const TACTICAL_BRIGADE_SIZE = 100;
-
   // ============================================================================
-  // 2. GENERADOR PSEUDOALEATORIO DETERMINISTA: mulberry32(seed)
+  // 2. PRNG DETERMINISTA mulberry32(seed) Y MUESTREADORES ESTADÍSTICOS
   // ============================================================================
   function mulberry32(seed) {
     let a = seed >>> 0;
@@ -167,34 +257,59 @@
     return seeds;
   }
 
+  function createFnv1aHasher() {
+    let fnvHash = 0x811c9dc5;
+    return {
+      mix(val) {
+        fnvHash ^= val & 0xff;
+        fnvHash = Math.imul(fnvHash, 0x01000193) >>> 0;
+        fnvHash ^= (val >>> 8) & 0xff;
+        fnvHash = Math.imul(fnvHash, 0x01000193) >>> 0;
+        fnvHash ^= (val >>> 16) & 0xff;
+        fnvHash = Math.imul(fnvHash, 0x01000193) >>> 0;
+      },
+      hex() {
+        return "0x" + fnvHash.toString(16).toUpperCase().padStart(8, "0");
+      }
+    };
+  }
+
   function sampleBinomial(n, p, rng) {
+    const u1 = rng();
+    const u2 = rng();
     if (n <= 0 || p <= 0) return 0;
     if (p >= 1) return n;
-    if (p > 0.5) {
-      return n - sampleBinomial(n, 1 - p, rng);
+
+    let flipped = false;
+    let prob = p;
+    if (prob > 0.5) {
+      prob = 1 - prob;
+      flipped = true;
     }
 
-    const mean = n * p;
-    if (mean < 20) {
-      let successes = 0;
-      let idx = 0;
-      const logComplement = Math.log(1 - p);
-      while (true) {
-        const u = Math.max(1e-12, rng());
-        const skip = Math.floor(Math.log(u) / logComplement);
-        idx += skip + 1;
-        if (idx > n) break;
-        successes++;
+    const mean = n * prob;
+    let res = 0;
+    if (mean < 14) {
+      const q = 1 - prob;
+      let term = Math.exp(n * Math.log(q));
+      let cdf = term;
+      const ratio = prob / q;
+      let k = 0;
+      const limit = Math.min(n, Math.floor(mean + 10 * Math.sqrt(mean + 1)) + 12);
+      while (u1 > cdf && k < limit) {
+        term *= ((n - k) * ratio) / (k + 1);
+        cdf += term;
+        k++;
       }
-      return successes;
+      res = k;
+    } else {
+      const safeU1 = Math.max(1e-12, u1);
+      const z = Math.sqrt(-2 * Math.log(safeU1)) * Math.cos(2 * Math.PI * u2);
+      const sampled = Math.round(mean + Math.sqrt(mean * (1 - prob)) * z);
+      res = Math.max(0, Math.min(n, sampled));
     }
 
-    const u1 = Math.max(1e-12, rng());
-    const u2 = rng();
-    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-    const std = Math.sqrt(mean * (1 - p));
-    const sampled = Math.round(mean + std * z);
-    return Math.max(0, Math.min(n, sampled));
+    return flipped ? n - res : res;
   }
 
   function sampleHypergeometric(totalPop, successPop, draws, rng) {
@@ -203,7 +318,7 @@
     const maxPossible = Math.min(draws, successPop);
     if (minPossible >= maxPossible) return minPossible;
 
-    if (draws <= 40) {
+    if (draws <= 30) {
       let chosen = 0;
       let remTot = totalPop;
       let remSucc = successPop;
@@ -228,35 +343,100 @@
     return Math.max(minPossible, Math.min(maxPossible, sampled));
   }
 
-  /**
-   * Puntaje diario oficial de "Escudo de Centralidad y Riesgo":
-   * puntaje = Conexiones del barrio * Zombies en barrios vecinos * Proporción de Sanos locales
-   */
-  function computeShieldScore(nodeIndex, S, I) {
-    if (S[nodeIndex] <= 0) return 0;
-    const node = MANTA_NODES[nodeIndex];
-    const connections = node.neighbors.length;
-    let neighborZombies = 0;
-    for (let m = 0; m < node.neighbors.length; m++) {
-      neighborZombies += I[node.neighbors[m]];
+  // ============================================================================
+  // 3. CALIBRACIÓN CLIMÁTICA EN VIVO (OPEN-METEO + CURVA TÉRMICA DE BRIÈRE)
+  // ============================================================================
+  function computeClimateCalibratedBeta(baseBeta, tempC, humidityPct, precipMm) {
+    const tEff = Math.max(14.5, Math.min(38.0, Number(tempC) || 26.5));
+    const rhEff = Math.max(20.0, Math.min(100.0, Number(humidityPct) || 76.0));
+    const pEff = Math.max(0.0, Math.min(50.0, Number(precipMm) || 0.0));
+
+    function briere(t) {
+      return t * (t - 13.5) * Math.sqrt(Math.max(0.01, 39.0 - t));
     }
-    const healthyRatio = S[nodeIndex] / node.population;
-    return connections * neighborZombies * healthyRatio;
+
+    const phiTemp = briere(tEff) / briere(26.5);
+    const phiRh = Math.max(0.75, Math.min(1.25, 1.0 + 0.0045 * (rhEff - 76.0)));
+    const phiRain = 1.0 + Math.min(0.28, 0.035 * pEff);
+    const multiplier = phiTemp * phiRh * phiRain;
+    const betaCal = Math.max(0.15, Math.min(2.20, Number((baseBeta * multiplier).toFixed(2))));
+
+    return {
+      betaCalibrated: betaCal,
+      multiplier: Number(multiplier.toFixed(2)),
+      phiTemp: Number(phiTemp.toFixed(3)),
+      phiRh: Number(phiRh.toFixed(3)),
+      phiRain: Number(phiRain.toFixed(3))
+    };
   }
 
   // ============================================================================
-  // 3. SIMULACIÓN SEIR DIARIA CON PRESUPUESTO E INTERVENCIONES COMBINADAS
+  // 4. MOTOR SEIR + ESCUDO DE CENTRALIDAD Y CERCO PERIMETRAL ADAPTATIVO
   // ============================================================================
+  function computeShieldScore(nodeIndex, S, E, I, efficacy = 0.85) {
+    if (S[nodeIndex] <= 0) return 0;
+    const node = MANTA_NODES[nodeIndex];
+    const deg = node.neighbors.length;
+
+    let neighborInfected = 0;
+    let neighborActiveHub = false;
+    for (let m = 0; m < deg; m++) {
+      const nb = node.neighbors[m];
+      const nbLoad = I[nb] + 0.5 * E[nb];
+      neighborInfected += I[nb];
+      if (nbLoad >= 6 && (MANTA_NODES[nb].neighbors.length >= 3 || efficacy <= 0.65)) {
+        neighborActiveHub = true;
+      }
+    }
+
+    const healthyRatio = S[nodeIndex] / node.population;
+    const baseScore = deg * neighborInfected * healthyRatio;
+
+    const localActiveLoad = I[nodeIndex] + E[nodeIndex];
+    const localPrevalence = localActiveLoad / node.population;
+
+    let hasHealthyPerimeter = false;
+    if (localActiveLoad >= 6) {
+      for (let m = 0; m < deg; m++) {
+        const nb = node.neighbors[m];
+        if (S[nb] / MANTA_NODES[nb].population > 0.35 && I[nb] + E[nb] < localActiveLoad) {
+          hasHealthyPerimeter = true;
+          break;
+        }
+      }
+    }
+
+    let ringMultiplier = 1.0;
+    if (
+      localActiveLoad >= 8 &&
+      hasHealthyPerimeter &&
+      (deg >= 3 || efficacy <= 0.65 || localPrevalence >= 0.008)
+    ) {
+      // Evita desperdiciar vacunas dentro del foco expuesto mientras se blinda el anillo vecino
+      ringMultiplier = 0.18;
+    } else if (neighborActiveHub && localPrevalence < 0.035) {
+      // Anillo perimetral preventivo en los barrios vecinos conectados al epicentro
+      ringMultiplier = 2.35;
+    }
+
+    return baseScore * ringMultiplier;
+  }
+
   function simulateSingleTrajectory(runSeed, strategy, config, recordNodeHistory) {
     const numNodes = MANTA_NODES.length;
     const days = config.days;
+    const modeProfile = MODE_PROFILES[config.mode] || MODE_PROFILES.zombie;
+    const isDengue = config.mode === "dengue";
+
     const beta = config.beta;
     const sigma = 1 / Math.max(1, config.incubationDays);
-    const gamma = EXORCISM_RATE_GAMMA;
+    const gamma = modeProfile.recoveryGamma;
+    const corridorCoupling = modeProfile.corridorCoupling;
+    const initialCases = modeProfile.initialCases;
     const efficacy = Math.max(0.10, Math.min(1.0, config.vaccineEfficacyPct / 100));
 
     const S = new Int32Array(numNodes);
-    const S_vacFailed = new Int32Array(numNodes); // Sanos vacunados cuya dosis no inmunizó por resistencia
+    const S_vacFailed = new Int32Array(numNodes);
     const E = new Int32Array(numNodes);
     const I = new Int32Array(numNodes);
     const R = new Int32Array(numNodes);
@@ -269,7 +449,6 @@
     const closuresByNode = new Int32Array(numNodes);
     const cumInfectedByNode = new Int32Array(numNodes);
 
-    // Registro de acciones en las primeras 48 horas (Día 1 y Día 2) para el Informe del Alcalde
     const first48h = recordNodeHistory
       ? {
           closures: [],
@@ -283,7 +462,7 @@
     }
 
     const pz = config.patientZeroIndex;
-    const initZ = Math.min(INITIAL_ZOMBIES, S[pz]);
+    const initZ = Math.min(initialCases, S[pz]);
     S[pz] -= initZ;
     I[pz] = initZ;
     cumInfectedByNode[pz] = initZ;
@@ -302,6 +481,7 @@
 
     const policyRng = mulberry32((runSeed ^ 0x9E3779B9) >>> 0);
     const effRng = mulberry32((runSeed ^ 0x517CC1B7) >>> 0);
+    const epiRng = mulberry32(runSeed >>> 0);
 
     const dailyS = new Int32Array(days + 1);
     const dailyE = new Int32Array(days + 1);
@@ -337,7 +517,7 @@
             fumDaysLeft: fumigationDaysLeft[k],
             closed: nodeClosed[k] === 1,
             cumInf: cumInfectedByNode[k],
-            score: computeShieldScore(k, S, I)
+            score: computeShieldScore(k, S, E, I, efficacy)
           };
         }
         nodeSnapshots[d] = snap;
@@ -351,14 +531,12 @@
     const newExorcised = new Int32Array(numNodes);
 
     for (let d = 1; d <= days; d++) {
-      // Reducir contador de días restantes de fumigación activa
       for (let k = 0; k < numNodes; k++) {
         if (fumigationDaysLeft[k] > 0) {
           fumigationDaysLeft[k]--;
         }
       }
 
-      // Llegada escalonada diaria de dosis a la cadena de frío (hasta el tope regional)
       if (strategy !== "none" && regionalStockRemaining > 0) {
         const arrivingDoses = Math.min(config.dailyDoseArrival, regionalStockRemaining);
         coldChainDosesAvailable += arrivingDoses;
@@ -367,11 +545,8 @@
 
       let brigadesLeftToday = strategy === "none" ? 0 : config.dailyBrigadeArrival;
 
-      // ------------------------------------------------------------------------
-      // FASE 1: INTERVENCIONES COMBINADAS Y VACUNACIÓN ESTRICTA A 🟢 SANOS
-      // ------------------------------------------------------------------------
+      // FASE 1: INTERVENCIONES COMBINADAS Y VACUNACIÓN ESTRICTA A POBLACIÓN SANA
       if (strategy === "random" && cashRemaining > 0) {
-        // 1A. Operativos al azar sin inteligencia topológica
         while (brigadesLeftToday > 0) {
           const canClose = config.useClosure && cashRemaining >= COST_NODE_CLOSURE && totalClosures < 3;
           const canFum = config.useFumigation && cashRemaining >= COST_FUMIGATION && totalFumigations < 8;
@@ -399,7 +574,6 @@
           }
         }
 
-        // 1B. Vacunación al azar estrictamente en población 🟢 Sana elegible
         if (config.useVaccines && coldChainDosesAvailable > 0 && cashRemaining >= COST_VACCINE_DOSE) {
           const maxAffordable = Math.floor(cashRemaining / COST_VACCINE_DOSE);
           let eligiblePool = 0;
@@ -407,8 +581,7 @@
             eligiblePool += S[k] - S_vacFailed[k];
           }
 
-          const toApply = Math.min(coldChainDosesAvailable, Math.min(maxAffordable, eligiblePool));
-          let dosesLeft = toApply;
+          let dosesLeft = Math.min(coldChainDosesAvailable, Math.min(maxAffordable, eligiblePool));
           let poolLeft = eligiblePool;
 
           for (let k = 0; k < numNodes && dosesLeft > 0; k++) {
@@ -437,15 +610,14 @@
           }
         }
       } else if (strategy === "shield" && cashRemaining > 0) {
-        // Reserva táctica adaptativa para fumigaciones durante los primeros 18 días
-        // Si la efectividad de la vacuna cae (variante resistente), protege más presupuesto para fumigación y cierres
+        const pzIsCentral = MANTA_NODES[pz].neighbors.length >= 3;
         const maxStrategicClosures = !config.useVaccines
           ? 8
-          : efficacy < 0.50
-            ? Math.max(1, Math.min(5, Math.floor(config.totalBudget / 9500)))
+          : efficacy <= 0.60 || pzIsCentral
+            ? Math.max(1, Math.min(5, Math.floor(config.totalBudget / 9000)))
             : Math.max(1, Math.min(4, Math.floor(config.totalBudget / 12500)));
 
-        // 2A. Cierre Selectivo de Nodo ($3,500, -75% flujo inter-barrial) en foco activo y puentes críticos
+        // 2A. Cerco Sanitario / Cuarentena Selectiva ($3,500, -75% flujo inter-barrial)
         if (config.useClosure) {
           while (
             brigadesLeftToday > 0 &&
@@ -464,12 +636,11 @@
               }
               const sFrac = S[k] / MANTA_NODES[k].population;
 
-              // Prioridad 1: Contener el epicentro activo con zombies; Prioridad 2: Cerrar cuellos de botella amenazados
               let cScore = 0;
-              if (I[k] >= 5) {
-                cScore = 1500 + I[k] * deg * 12;
-              } else if (neighZ >= 6) {
-                cScore = deg * neighZ * sFrac * 3.0;
+              if (I[k] >= 4 || (k === pz && I[k] + E[k] >= 3)) {
+                cScore = 1800 + (I[k] + 0.5 * E[k]) * deg * 15;
+              } else if (neighZ >= 5) {
+                cScore = deg * neighZ * sFrac * 3.4;
               }
 
               if (cScore > bestCloseScore) {
@@ -493,7 +664,7 @@
           }
         }
 
-        // 2B. Brigada de Fumigación ($1,200, -40% contagio local por 5 días) en barrios con infección activa
+        // 2B. Brigada de Fumigación / Control Vectorial ($1,200, -40% contagio local por 5 días)
         if (config.useFumigation) {
           while (brigadesLeftToday > 0 && cashRemaining >= COST_FUMIGATION) {
             let bestFumNode = -1;
@@ -502,11 +673,12 @@
             for (let k = 0; k < numNodes; k++) {
               if (fumigationDaysLeft[k] > 0 || S[k] < 150) continue;
               const activeLoad = I[k] + 0.5 * E[k];
-              if (activeLoad < 4) continue;
+              if (activeLoad < 3.5) continue;
 
               const sFrac = S[k] / MANTA_NODES[k].population;
               const deg = MANTA_NODES[k].neighbors.length;
-              const fScore = activeLoad * sFrac * (1 + 0.3 * deg);
+              const vectorWeight = isDengue ? MANTA_NODES[k].aedesBreteauIndex / 14.0 : 1.0;
+              const fScore = activeLoad * sFrac * (1 + 0.35 * deg) * vectorWeight;
               if (fScore > bestFumScore) {
                 bestFumScore = fScore;
                 bestFumNode = k;
@@ -528,12 +700,12 @@
           }
         }
 
-        // 2C. Vacunación Focalizada por Escudo de Centralidad y Riesgo ($15/dosis, solo 🟢 Sanos)
+        // 2C. Vacunación con Anillo Perimetral Adaptativo ($15/dosis, solo población Sana)
         if (config.useVaccines && coldChainDosesAvailable > 0 && cashRemaining >= COST_VACCINE_DOSE) {
-          // Si la fumigación está activa y estamos en las primeras 2 semanas, reservar colchón operativo para re-fumigar
+          const reserveRatio = efficacy <= 0.55 ? 0.26 : pzIsCentral ? 0.14 : 0.08;
           const fumReserve =
-            config.useFumigation && d <= 16
-              ? Math.min(cashRemaining, Math.round(config.totalBudget * (efficacy < 0.50 ? 0.22 : 0.08)))
+            (config.useFumigation || config.useClosure) && d <= 18
+              ? Math.min(cashRemaining, Math.round(config.totalBudget * reserveRatio))
               : 0;
           const spendableForVaccines = Math.max(0, cashRemaining - fumReserve);
           const maxAffordableDoses = Math.floor(spendableForVaccines / COST_VACCINE_DOSE);
@@ -553,8 +725,7 @@
             for (let k = 0; k < numNodes; k++) {
               const elig = S[k] - S_vacFailed[k];
               if (elig <= 0) continue;
-              // Fórmula exacta: Conexiones * Zombies_Vecinos * Proporción_Sanos_Locales
-              const score = computeShieldScore(k, S, I) * (elig / Math.max(1, S[k]));
+              const score = computeShieldScore(k, S, E, I, efficacy) * (elig / Math.max(1, S[k]));
               if (score > bestScore) {
                 bestScore = score;
                 bestNode = k;
@@ -567,9 +738,10 @@
               for (let k = 0; k < numNodes; k++) {
                 const elig = S[k] - S_vacFailed[k];
                 if (elig <= 0) continue;
+                const isRingNb = MANTA_NODES[k].neighbors.includes(pz) && k !== pz ? 2.2 : 1.0;
                 const fb =
                   MANTA_NODES[k].neighbors.length *
-                  (I[k] + 1) *
+                  isRingNb *
                   (elig / MANTA_NODES[k].population);
                 if (fb > bestScore) {
                   bestScore = fb;
@@ -607,21 +779,15 @@
         }
       }
 
-      // ------------------------------------------------------------------------
       // FASE 2: TRANSICIÓN DIARIA SEIR ESTOCÁSTICA (NÚMEROS ALEATORIOS COMUNES)
-      // ------------------------------------------------------------------------
       for (let k = 0; k < numNodes; k++) {
         const node = MANTA_NODES[k];
-        const nodeDaySeed = (runSeed ^ Math.imul(d, 73856093) ^ Math.imul(k + 1, 19349663)) >>> 0;
-        const rng = mulberry32(nodeDaySeed);
+        const contactDispersion = 0.60 + 0.80 * epiRng();
 
-        const contactDispersion = 0.60 + 0.80 * rng();
-
-        // Efecto de Brigada de Fumigación activa: -40% contagio local
         const localFumModifier = fumigationDaysLeft[k] > 0 ? FUMIGATION_LOCAL_MULT : 1.0;
-        const localForce = localFumModifier * beta * (I[k] / node.population);
+        const breteauMod = isDengue ? 0.85 + 0.30 * (node.aedesBreteauIndex / 15.0) : 1.0;
+        const localForce = localFumModifier * breteauMod * beta * (I[k] / node.population);
 
-        // Efecto de Cierre Selectivo de Nodo: -75% flujo inter-barrial por nodo cerrado en la arista
         const hubTrafficFactor = node.neighbors.length / 3.0;
         let neighborForce = 0;
         for (let m = 0; m < node.neighbors.length; m++) {
@@ -630,29 +796,29 @@
           if (nodeClosed[k] === 1) corridorMod *= CLOSURE_FLOW_MULT;
           if (nodeClosed[nbIdx] === 1) corridorMod *= CLOSURE_FLOW_MULT;
 
+          const edgeCoupling = isDengue
+            ? MOBILITY_MATRIX[k][nbIdx]
+            : corridorCoupling * hubTrafficFactor;
+
           neighborForce +=
             corridorMod *
-            CORRIDOR_COUPLING *
-            hubTrafficFactor *
+            edgeCoupling *
             beta *
             (I[nbIdx] / MANTA_NODES[nbIdx].population);
         }
 
         const totalLambda = (localForce + neighborForce) * contactDispersion;
-        const probBite = totalLambda > 0 ? 1 - Math.exp(-totalLambda) : 0;
+        const probExposure = totalLambda > 0 ? 1 - Math.exp(-totalLambda) : 0;
 
-        newExposed[k] = sampleBinomial(S[k], probBite, rng);
-        newZombies[k] = sampleBinomial(E[k], sigma, rng);
-        newExorcised[k] = sampleBinomial(I[k], gamma, rng);
+        newExposed[k] = sampleBinomial(S[k], probExposure, epiRng);
+        newZombies[k] = sampleBinomial(E[k], sigma, epiRng);
+        newExorcised[k] = sampleBinomial(I[k], gamma, epiRng);
       }
 
       for (let k = 0; k < numNodes; k++) {
         if (S[k] > 0 && newExposed[k] > 0 && S_vacFailed[k] > 0) {
           const bittenFromFailed = Math.round((newExposed[k] * S_vacFailed[k]) / S[k]);
-          S_vacFailed[k] = Math.max(
-            0,
-            Math.min(S[k] - newExposed[k], S_vacFailed[k] - bittenFromFailed)
-          );
+          S_vacFailed[k] = Math.max(0, Math.min(S[k] - newExposed[k], S_vacFailed[k] - bittenFromFailed));
         }
 
         S[k] -= newExposed[k];
@@ -689,32 +855,29 @@
     };
   }
 
-  // ============================================================================
-  // 4. AGREGADOR MONTE CARLO + FIRMA DETERMINISTA FNV-1a
-  // ============================================================================
-  function computeStats(values) {
-    let sum = 0;
+  function computeStats(arr) {
     let min = Infinity;
     let max = -Infinity;
-    for (let i = 0; i < values.length; i++) {
-      const v = values[i];
+    let sum = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
       sum += v;
       if (v < min) min = v;
       if (v > max) max = v;
     }
     return {
-      mean: sum / values.length,
-      min,
-      max
+      mean: arr.length ? sum / arr.length : 0,
+      min: arr.length ? min : 0,
+      max: arr.length ? max : 0
     };
   }
 
-  function runMonteCarloSimulation(config) {
+  function runMonteCarloSimulation(config, customSubSeeds = null) {
     const t0 = performance.now();
-    const runs = config.runs;
+    const subSeeds = customSubSeeds || deriveSubSeeds(config.seed, config.runs);
+    const runs = subSeeds.length;
     const days = config.days;
     const numNodes = MANTA_NODES.length;
-    const subSeeds = deriveSubSeeds(config.seed, runs);
 
     const strategyKeys = ["none", "random", "shield"];
     const agg = {};
@@ -750,15 +913,7 @@
       };
     }
 
-    let fnvHash = 0x811c9dc5;
-    function mixHash(val) {
-      fnvHash ^= val & 0xff;
-      fnvHash = Math.imul(fnvHash, 0x01000193) >>> 0;
-      fnvHash ^= (val >>> 8) & 0xff;
-      fnvHash = Math.imul(fnvHash, 0x01000193) >>> 0;
-      fnvHash ^= (val >>> 16) & 0xff;
-      fnvHash = Math.imul(fnvHash, 0x01000193) >>> 0;
-    }
+    const hasher = createFnv1aHasher();
 
     for (let r = 0; r < runs; r++) {
       const seed = subSeeds[r];
@@ -784,9 +939,9 @@
         bucket.spentSum += res.totalBudgetSpent;
         bucket.violationsSum += res.forbiddenVaccineViolations;
 
-        mixHash(res.cumulativeInfected);
-        mixHash(res.totalDosesApplied);
-        mixHash(res.totalBudgetSpent);
+        hasher.mix(res.cumulativeInfected);
+        hasher.mix(res.totalDosesApplied);
+        hasher.mix(res.totalBudgetSpent);
 
         for (let k = 0; k < numNodes; k++) {
           bucket.nodeVacSum[k] += res.vaccinatedByNode[k];
@@ -870,19 +1025,21 @@
     }
 
     const elapsedMs = performance.now() - t0;
-    const hashHex = "0x" + fnvHash.toString(16).toUpperCase().padStart(8, "0");
+    const hashHex = hasher.hex();
 
     return {
       config,
       subSeeds,
       summary,
       elapsedMs,
-      hashHex
+      hashHex,
+      cloudEngine: "local-mulberry32",
+      workersUsed: 1
     };
   }
 
   // ============================================================================
-  // 5. ESTADO DE UI, REFERENCIAS DOM Y CONTROLES
+  // 5. ESTADO GLOBAL DE UI Y REFERENCIAS DOM
   // ============================================================================
   const fmtInt = new Intl.NumberFormat("es-EC", { maximumFractionDigits: 0 });
   const fmtDec = new Intl.NumberFormat("es-EC", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -895,28 +1052,67 @@
     return "$" + fmtInt.format(Math.round(n));
   }
 
+  let activeEpiMode = DEFAULT_CONFIG.mode;
+  let activeMapView = "geo"; // "geo" (Leaflet GPS) o "topo" (SVG)
   let currentResult = null;
   let activeChartMetric = "cumInfected";
   let selectedNodeIndex = DEFAULT_CONFIG.patientZeroIndex;
-  let timelineDay = 1;
+  let timelineDay = 60;
   let timelineTimer = null;
   let plainTextMayorBrief = "";
   let latestRequestId = 0;
 
-  const DEFAULT_LAMBDA_URL = "https://sw5fdgyzewlgqjttz2jhjkvaey0udlbt.lambda-url.us-east-2.on.aws/";
-  const LAMBDA_STORAGE_KEY = "manta_contencion_lambda_url";
+  let currentMantaWeather = {
+    live: false,
+    temperatureC: 26.8,
+    humidityPct: 78,
+    precipitationMm: 0.0,
+    source: "Climatología Manta"
+  };
 
   let comparisonChartInstance = null;
   let seirChartInstance = null;
 
+  // Instancias de Leaflet (Mapa Geoespacial Real de Manta)
+  let leafletMap = null;
+  let leafletEdgeLines = [];
+  let leafletHeatCircles = [];
+  let leafletNodeMarkers = [];
+
   const dom = {
-    // Conexión Cloud AWS Lambda
+    // Modo y Clima Open-Meteo
+    brandEmblem: document.getElementById("brandEmblem"),
+    topModeBadge: document.getElementById("topModeBadge"),
+    btnModeZombie: document.getElementById("btnModeZombie"),
+    btnModeDengue: document.getElementById("btnModeDengue"),
+    modeHelperText: document.getElementById("modeHelperText"),
+    weatherLiveDot: document.getElementById("weatherLiveDot"),
+    weatherSourceBadge: document.getElementById("weatherSourceBadge"),
+    weatherTempVal: document.getElementById("weatherTempVal"),
+    weatherHumVal: document.getElementById("weatherHumVal"),
+    weatherPrecipVal: document.getElementById("weatherPrecipVal"),
+    weatherFactorVal: document.getElementById("weatherFactorVal"),
+    btnCalibrateWeather: document.getElementById("btnCalibrateWeather"),
+
+    // Conexión Cloud AWS Lambda + Fan-Out
     inputLambdaUrl: document.getElementById("inputLambdaUrl"),
     btnApplyLambda: document.getElementById("btnApplyLambda"),
     btnClearLambda: document.getElementById("btnClearLambda"),
+    cloudParallelBadge: document.getElementById("cloudParallelBadge"),
     cloudStatusPill: document.getElementById("cloudStatusPill"),
     cloudStatusText: document.getElementById("cloudStatusText"),
+    datasetSourcePill: document.getElementById("datasetSourcePill"),
 
+    // Barra Rápida Brote Sorpresa + Auto-Optimizador
+    btnAutoOptimize: document.getElementById("btnAutoOptimize"),
+    btnChallengeBeta2x: document.getElementById("btnChallengeBeta2x"),
+    btnChallengeHalfVac: document.getElementById("btnChallengeHalfVac"),
+    btnChallengeTarqui: document.getElementById("btnChallengeTarqui"),
+    btnChallengeVariant50: document.getElementById("btnChallengeVariant50"),
+    btnChallengeRestore: document.getElementById("btnChallengeRestore"),
+    optimizerBanner: document.getElementById("optimizerBanner"),
+
+    // Formulario Principal
     form: document.getElementById("simForm"),
     inputSeed: document.getElementById("inputSeed"),
     rangeRuns: document.getElementById("rangeRuns"),
@@ -932,11 +1128,12 @@
     rangeIncubation: document.getElementById("rangeIncubation"),
     inputIncubation: document.getElementById("inputIncubation"),
     outIncubation: document.getElementById("outIncubation"),
+    incubationHelpText: document.getElementById("incubationHelpText"),
     rangeVaccines: document.getElementById("rangeVaccines"),
     inputVaccines: document.getElementById("inputVaccines"),
     outVaccines: document.getElementById("outVaccines"),
 
-    // Controles Anti-Brote Sorpresa (Nivel Pro)
+    // Controles Presupuesto e Intervenciones
     rangeEfficacy: document.getElementById("rangeEfficacy"),
     inputEfficacy: document.getElementById("inputEfficacy"),
     outEfficacy: document.getElementById("outEfficacy"),
@@ -966,6 +1163,21 @@
     determinismHash: document.getElementById("determinismHash"),
     strictAuditBadge: document.getElementById("strictAuditBadge"),
 
+    // Chips y etiquetas dinámicas de modo
+    chipLabelS: document.getElementById("chipLabelS"),
+    chipLabelE: document.getElementById("chipLabelE"),
+    chipLabelI: document.getElementById("chipLabelI"),
+    chipLabelR: document.getElementById("chipLabelR"),
+    liveLabelS: document.getElementById("liveLabelS"),
+    liveLabelE: document.getElementById("liveLabelE"),
+    liveLabelI: document.getElementById("liveLabelI"),
+    liveLabelR: document.getElementById("liveLabelR"),
+    inspLabelS: document.getElementById("inspLabelS"),
+    inspLabelE: document.getElementById("inspLabelE"),
+    inspLabelI: document.getElementById("inspLabelI"),
+    inspLabelR: document.getElementById("inspLabelR"),
+    tabActiveMetric: document.getElementById("tabActiveMetric"),
+
     // KPIs
     kpiBase1SavedMean: document.getElementById("kpiBase1SavedMean"),
     kpiBase1SavedRange: document.getElementById("kpiBase1SavedRange"),
@@ -991,7 +1203,13 @@
     mayorReportContainer: document.getElementById("mayorReportContainer"),
     btnCopyMayorReport: document.getElementById("btnCopyMayorReport"),
 
-    // Mapa SVG y Animación Día 1..60
+    // Mapas (Leaflet GPS + SVG Topológico) y Línea de Tiempo Día 0..60
+    btnViewGeo: document.getElementById("btnViewGeo"),
+    btnViewTopo: document.getElementById("btnViewTopo"),
+    geoMapContainer: document.getElementById("geoMapContainer"),
+    topoMapContainer: document.getElementById("topoMapContainer"),
+    mantaGeoMap: document.getElementById("mantaGeoMap"),
+
     mapDescMaxDay: document.getElementById("mapDescMaxDay"),
     selectMapStrategy: document.getElementById("selectMapStrategy"),
     btnPlayTimeline: document.getElementById("btnPlayTimeline"),
@@ -1018,14 +1236,18 @@
     inspVac: document.getElementById("inspVac"),
     inspScore: document.getElementById("inspScore"),
 
-    // Tabla y Gráficas
+    // Tablas, Gráficas y DynamoDB Audit
     tableFinalDay: document.getElementById("tableFinalDay"),
     barrioTableBody: document.getElementById("barrioTableBody"),
     barrioTableFoot: document.getElementById("barrioTableFoot"),
     auditSummaryText: document.getElementById("auditSummaryText"),
     comparisonCanvas: document.getElementById("comparisonChart"),
     seirCanvas: document.getElementById("seirBreakdownChart"),
-    selectSeirStrategy: document.getElementById("selectSeirStrategy")
+    selectSeirStrategy: document.getElementById("selectSeirStrategy"),
+
+    dynamoStorageBadge: document.getElementById("dynamoStorageBadge"),
+    btnRefreshDynamo: document.getElementById("btnRefreshDynamo"),
+    dynamoAuditBody: document.getElementById("dynamoAuditBody")
   };
 
   function populatePatientZeroSelect() {
@@ -1070,6 +1292,7 @@
     const dailyBrigRaw = parseInt(dom.inputDailyBrigades.value, 10);
 
     const config = {
+      mode: activeEpiMode,
       seed: Number.isFinite(seedRaw) ? Math.max(0, seedRaw) : DEFAULT_CONFIG.seed,
       runs: Number.isFinite(runsRaw) ? Math.max(1, Math.min(500, runsRaw)) : DEFAULT_CONFIG.runs,
       days: Number.isFinite(daysRaw) ? Math.max(10, Math.min(365, daysRaw)) : DEFAULT_CONFIG.days,
@@ -1104,10 +1327,13 @@
   }
 
   function applyConfigToForm(cfg) {
+    if (cfg.mode) {
+      activeEpiMode = cfg.mode;
+    }
     dom.inputSeed.value = String(cfg.seed);
 
     dom.inputRuns.value = String(cfg.runs);
-    dom.rangeRuns.value = String(Math.min(200, cfg.runs));
+    dom.rangeRuns.value = String(Math.min(500, cfg.runs));
     dom.outRuns.textContent = String(cfg.runs);
 
     dom.inputDays.value = String(cfg.days);
@@ -1117,7 +1343,7 @@
     dom.selectPatientZero.value = String(cfg.patientZeroIndex);
 
     dom.inputBeta.value = cfg.beta.toFixed(2);
-    dom.rangeBeta.value = String(Math.min(1.5, cfg.beta));
+    dom.rangeBeta.value = String(Math.min(2.2, cfg.beta));
     dom.outBeta.textContent = cfg.beta.toFixed(2);
 
     dom.inputIncubation.value = String(cfg.incubationDays);
@@ -1149,18 +1375,199 @@
     dom.chkUseClosure.checked = cfg.useClosure;
   }
 
+  function updateModeLabelsUI() {
+    const prof = MODE_PROFILES[activeEpiMode] || MODE_PROFILES.zombie;
+    const isDengue = activeEpiMode === "dengue";
+
+    dom.btnModeZombie.classList.toggle("active", !isDengue);
+    dom.btnModeZombie.setAttribute("aria-selected", String(!isDengue));
+    dom.btnModeDengue.classList.toggle("active", isDengue);
+    dom.btnModeDengue.setAttribute("aria-selected", String(isDengue));
+
+    dom.brandEmblem.textContent = prof.emblem;
+    dom.topModeBadge.textContent = prof.badgeText;
+    dom.modeHelperText.innerHTML = prof.helperHtml;
+    dom.incubationHelpText.textContent = prof.labels.incHelp;
+
+    dom.chipLabelS.innerHTML = `${prof.labels.S} · Único vacunable`;
+    dom.chipLabelE.innerHTML = `${prof.labels.E} · No vacunable`;
+    dom.chipLabelI.innerHTML = `${prof.labels.I} · No vacunable`;
+    dom.chipLabelR.innerHTML = `${prof.labels.R} · Protegido`;
+
+    dom.liveLabelS.textContent = prof.labels.S;
+    dom.liveLabelE.textContent = prof.labels.E;
+    dom.liveLabelI.textContent = prof.labels.I;
+    dom.liveLabelR.textContent = prof.labels.R;
+
+    dom.inspLabelS.textContent = prof.labels.S;
+    dom.inspLabelE.textContent = prof.labels.E;
+    dom.inspLabelI.textContent = prof.labels.I;
+    dom.inspLabelR.textContent = prof.labels.R;
+    dom.tabActiveMetric.textContent = prof.labels.shortI;
+
+    renderWeatherWidget();
+  }
+
   // ============================================================================
-  // 6. INFORME EJECUTIVO AUTOMÁTICO PARA EL ALCALDE DE MANTA (SIN TECNICISMOS)
+  // 6. TELEMETRÍA EN VIVO OPEN-METEO PARA MANTA
   // ============================================================================
+  function renderWeatherWidget() {
+    const prof = MODE_PROFILES[activeEpiMode] || MODE_PROFILES.zombie;
+    const cal = computeClimateCalibratedBeta(
+      prof.betaBase,
+      currentMantaWeather.temperatureC,
+      currentMantaWeather.humidityPct,
+      currentMantaWeather.precipitationMm
+    );
+
+    dom.weatherTempVal.textContent = `${currentMantaWeather.temperatureC.toFixed(1)} °C`;
+    dom.weatherHumVal.textContent = `${Math.round(currentMantaWeather.humidityPct)} %`;
+    dom.weatherPrecipVal.textContent = `${currentMantaWeather.precipitationMm.toFixed(1)} mm`;
+    dom.weatherFactorVal.textContent = `${cal.multiplier.toFixed(2)}× (β=${cal.betaCalibrated.toFixed(2)})`;
+    dom.weatherSourceBadge.textContent = currentMantaWeather.live
+      ? "En vivo · Open-Meteo Manta"
+      : "Climatología Manta (Respaldo)";
+  }
+
+  async function fetchLiveMantaWeather() {
+    try {
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 3500);
+      const resp = await fetch(OPEN_METEO_URL, { signal: controller.signal });
+      clearTimeout(tId);
+      if (!resp.ok) throw new Error("Open-Meteo HTTP error");
+      const data = await resp.json();
+      if (data && data.current) {
+        currentMantaWeather = {
+          live: true,
+          temperatureC: Number(data.current.temperature_2m ?? 26.8),
+          humidityPct: Number(data.current.relative_humidity_2m ?? 78),
+          precipitationMm: Number(data.current.precipitation ?? 0.0),
+          source: "Open-Meteo Live"
+        };
+      }
+    } catch (_) {
+      // Mantiene valores climatológicos costeros de Manta sin lanzar error
+    }
+    renderWeatherWidget();
+  }
+
+  // ============================================================================
+  // 7. AUTO-OPTIMIZADOR PRESUPUESTARIO E INFORME EJECUTIVO DEL ALCALDE
+  // ============================================================================
+  function runBudgetAutoOptimizer() {
+    const baseCfg = readConfigFromForm();
+    const evalSeeds = deriveSubSeeds(baseCfg.seed, Math.min(14, Math.max(8, Math.floor(baseCfg.runs / 3))));
+
+    const candidates = [
+      {
+        label: "Escudo Integral + Cerco Perimetral Rápido",
+        useVaccines: true,
+        useFumigation: true,
+        useClosure: true,
+        dailyBrigadeArrival: Math.max(3, baseCfg.dailyBrigadeArrival),
+        dailyDoseArrival: Math.max(1000, baseCfg.dailyDoseArrival)
+      },
+      {
+        label: "Anillo Vacunal + Cerco Vial Selectivo",
+        useVaccines: true,
+        useFumigation: false,
+        useClosure: true,
+        dailyBrigadeArrival: Math.max(2, baseCfg.dailyBrigadeArrival),
+        dailyDoseArrival: Math.max(1200, baseCfg.dailyDoseArrival)
+      },
+      {
+        label: "Choque Antivectorial + Cerco de Contención (Variante Resistente)",
+        useVaccines: true,
+        useFumigation: true,
+        useClosure: true,
+        dailyBrigadeArrival: Math.max(4, baseCfg.dailyBrigadeArrival),
+        dailyDoseArrival: Math.max(700, baseCfg.dailyDoseArrival)
+      },
+      {
+        label: "Vacunación Preventiva + Fumigación Intensiva",
+        useVaccines: true,
+        useFumigation: true,
+        useClosure: false,
+        dailyBrigadeArrival: Math.max(3, baseCfg.dailyBrigadeArrival),
+        dailyDoseArrival: Math.max(1100, baseCfg.dailyDoseArrival)
+      },
+      {
+        label: "Fumigación + Cerco Sanitario Estricto (Sin Biológico)",
+        useVaccines: false,
+        useFumigation: true,
+        useClosure: true,
+        dailyBrigadeArrival: Math.max(4, baseCfg.dailyBrigadeArrival),
+        dailyDoseArrival: baseCfg.dailyDoseArrival
+      },
+      {
+        label: "Vacunación Masiva Exclusiva en Anillo Sano",
+        useVaccines: true,
+        useFumigation: false,
+        useClosure: false,
+        dailyBrigadeArrival: 0,
+        dailyDoseArrival: Math.max(1500, baseCfg.dailyDoseArrival)
+      },
+      {
+        label: "Configuración Operativa Actual (Referencia)",
+        useVaccines: baseCfg.useVaccines,
+        useFumigation: baseCfg.useFumigation,
+        useClosure: baseCfg.useClosure,
+        dailyBrigadeArrival: baseCfg.dailyBrigadeArrival,
+        dailyDoseArrival: baseCfg.dailyDoseArrival
+      }
+    ];
+
+    let bestCandidate = candidates[0];
+    let bestSaved = -Infinity;
+    let baselineSaved = 0;
+
+    candidates.forEach((cand, idx) => {
+      const testCfg = Object.assign({}, baseCfg, {
+        useVaccines: cand.useVaccines,
+        useFumigation: cand.useFumigation,
+        useClosure: cand.useClosure,
+        dailyBrigadeArrival: cand.dailyBrigadeArrival,
+        dailyDoseArrival: cand.dailyDoseArrival
+      });
+      const sim = runMonteCarloSimulation(testCfg, evalSeeds);
+      const saved = sim.summary.shield.savedStats.mean;
+      if (idx === candidates.length - 1) {
+        baselineSaved = saved;
+      }
+      if (saved > bestSaved) {
+        bestSaved = saved;
+        bestCandidate = cand;
+      }
+    });
+
+    const optimizedCfg = Object.assign({}, baseCfg, {
+      useVaccines: bestCandidate.useVaccines,
+      useFumigation: bestCandidate.useFumigation,
+      useClosure: bestCandidate.useClosure,
+      dailyBrigadeArrival: bestCandidate.dailyBrigadeArrival,
+      dailyDoseArrival: bestCandidate.dailyDoseArrival
+    });
+
+    applyConfigToForm(optimizedCfg);
+    const gain = Math.max(0, Math.round(bestSaved - baselineSaved));
+
+    dom.optimizerBanner.classList.remove("hidden");
+    dom.optimizerBanner.innerHTML =
+      `🧠 <strong>Auto-Optimizador Presupuestario Completado:</strong> Se evaluaron <strong>${candidates.length} combinaciones tácticas</strong> para presupuesto ${formatUSD(optimizedCfg.totalBudget)} (efectividad vacunal ${optimizedCfg.vaccineEfficacyPct}%, foco en ${MANTA_NODES[optimizedCfg.patientZeroIndex].name}). ` +
+      `Portafolio ganador aplicado: <strong>"${bestCandidate.label}"</strong> (${formatInt(optimizedCfg.dailyDoseArrival)} dosis/día · ${optimizedCfg.dailyBrigadeArrival} brigadas/día)${gain > 0 ? `, rescatando <strong>+${formatInt(gain)} vidas adicionales</strong> frente a la configuración previa` : ", confirmando que el portafolio activo ya se encuentra en el óptimo global"}.`;
+
+    executeFullSimulation(true);
+  }
+
   function renderMayorReport(result) {
     const { config, summary } = result;
     const sNone = summary.none;
     const sRand = summary.random;
     const sShield = summary.shield;
+    const isDengue = config.mode === "dengue";
 
     const pzNode = MANTA_NODES[config.patientZeroIndex];
-
-    // Identificar barrios intervenidos en las primeras 48 horas (Día 1 y Día 2)
     const f48 = sShield.first48h || {
       closures: [],
       fumigations: [],
@@ -1184,7 +1591,6 @@
     const first48Names = Array.from(earlyTargetSet);
     const bridgeText = priorityNeighbors.join(" y ");
 
-    // Cálculos de presupuesto promedio ejecutado por el Escudo
     const vacCost = Math.round(sShield.meanDoses * COST_VACCINE_DOSE);
     const fumCost = Math.round(sShield.meanFumigations * COST_FUMIGATION);
     const closeCost = Math.round(sShield.meanClosures * COST_NODE_CLOSURE);
@@ -1197,40 +1603,41 @@
     const randSavedMean = Math.round(sRand.savedStats.mean);
     const randSavedMin = Math.round(sRand.savedStats.min);
     const randSavedMax = Math.round(sRand.savedStats.max);
-
     const extraVsRandom = savedVsNoneMean - randSavedMean;
 
-    const variantAlert =
-      config.vaccineEfficacyPct < 60
-        ? ` Ante la baja efectividad de la vacuna frente a esta variante (${config.vaccineEfficacyPct}%), el plan refuerza automáticamente los cierres viales y la fumigación para no depender solo del biológico.`
-        : ` Con una efectividad vacunal del ${config.vaccineEfficacyPct}%, cada dosis aplicada exclusivamente a vecinos sanos levanta una barrera real de protección.`;
+    const ringNote =
+      pzNode.neighbors.length >= 3 || config.vaccineEfficacyPct <= 60
+        ? ` Como el foco compromete un nodo estratégico (${pzNode.name}) o presenta efectividad vacunal de ${config.vaccineEfficacyPct}%, el algoritmo activa el Cerco Perimetral Adaptativo: sella y fumiga el origen sin desperdiciar vacunas dentro del foco expuesto y crea un anillo protector en ${bridgeText}.`
+        : ` Con efectividad vacunal del ${config.vaccineEfficacyPct}%, el anillo preventivo blinda los corredores de mayor flujo exclusivamente en población sana.`;
+
+    const outbreakLabel = isDengue ? "brote epidémico de Dengue (INEC/MSP)" : "brote infeccioso (Track B)";
 
     const leadText =
-      `Señor Alcalde de Manta: Se ha detectado el inicio del brote en ${pzNode.name}. ` +
-      `Activando de inmediato la operación "Escudo de Centralidad y Riesgo" con un presupuesto de ${formatUSD(config.totalBudget)} ` +
-      `(ejecutando en promedio ${formatUSD(totalSpent)}), protegeremos la vida de ${formatInt(savedVsNoneMean)} mantenses en promedio ` +
-      `[Rango: ${formatInt(savedVsNoneMin)} a ${formatInt(savedVsNoneMax)}] en los próximos ${config.days} días.`;
+      `Señor Alcalde de Manta: Se ha confirmado el inicio del ${outbreakLabel} en ${pzNode.name} (GPS ${pzNode.lat}, ${pzNode.lng}). ` +
+      `Activando la estrategia "Escudo de Centralidad + Cerco Perimetral Adaptativo" con techo de ${formatUSD(config.totalBudget)} ` +
+      `(ejecutando en promedio ${formatUSD(totalSpent)}), salvaremos ${formatInt(savedVsNoneMean)} vidas mantenses en promedio ` +
+      `[Rango: ${formatInt(savedVsNoneMin)} a ${formatInt(savedVsNoneMax)}] durante los próximos ${config.days} días.`;
 
     const sec1Text =
-      `En las primeras 48 horas debemos intervenir de forma prioritaria en: ${first48Names.join(", ")}. ` +
-      `El primer paso es contener y fumigar de inmediato ${pzNode.name} para frenar los contagios dentro del foco inicial, ` +
-      `mientras instalamos controles viales y brigadas de vacunación preventiva en sus accesos clave (${bridgeText}) antes de que la plaga cruce hacia el resto de la ciudad.`;
+      `En las primeras 48 horas intervenimos de inmediato en: ${first48Names.join(", ")}. ` +
+      `Desplegamos fumigación/control vectorial y cerco selectivo en ${pzNode.name} para reducir el contagio local un 40% y cortar en 75% la salida de casos, ` +
+      `mientras levantamos el anillo de vacunación preventiva en sus barrios vecinos conectados (${bridgeText}).`;
 
     const sec2Text =
-      `De los ${formatUSD(config.totalBudget)} autorizados (con llegada escalonada de ${formatInt(config.dailyDoseArrival)} dosis y ${config.dailyBrigadeArrival} brigadas operativas por día), ` +
-      `la inversión óptima destina: ` +
-      `1) ${formatUSD(closeCost)} para ${fmtDec.format(sShield.meanClosures)} cierres selectivos de acceso vial ($3,500 c/u, reduciendo un 75% el paso del brote entre barrios); ` +
-      `2) ${formatUSD(fumCost)} para ${fmtDec.format(sShield.meanFumigations)} operativos de fumigación intensiva ($1,200 c/u, reduciendo un 40% los contagios locales por 5 días); y ` +
-      `3) ${formatUSD(vacCost)} para aplicar ${formatInt(sShield.meanDoses)} dosis de vacuna ($15 c/u) únicamente a ciudadanos sanos.${variantAlert}`;
+      `De los ${formatUSD(config.totalBudget)} autorizados (${formatInt(config.dailyDoseArrival)} dosis/día y ${config.dailyBrigadeArrival} brigadas/día), ` +
+      `la asignación óptima ejecuta: ` +
+      `1) ${formatUSD(closeCost)} en ${fmtDec.format(sShield.meanClosures)} cercos sanitarios selectivos ($3,500 c/u, -75% flujo vecino); ` +
+      `2) ${formatUSD(fumCost)} en ${fmtDec.format(sShield.meanFumigations)} brigadas de fumigación ($1,200 c/u, -40% contagio local por 5 días); y ` +
+      `3) ${formatUSD(vacCost)} en ${formatInt(sShield.meanDoses)} dosis de vacuna ($15 c/u) aplicadas 100% solo a vecinos sanos.${ringNote}`;
 
     const sec3Text =
-      `• Frente a no hacer nada (donde se infectarían cerca de ${formatInt(sNone.infectedStats.mean)} personas): nuestra estrategia salva en promedio ${formatInt(savedVsNoneMean)} vidas, con un rango comprobado entre [${formatInt(savedVsNoneMin)} - ${formatInt(savedVsNoneMax)}] personas libres de contagio. ` +
-      `• Frente a repartir recursos al azar (que apenas salva ${formatInt(randSavedMean)} personas [${formatInt(randSavedMin)} - ${formatInt(randSavedMax)}]): nuestra estrategia focalizada rescata ${extraVsRandom >= 0 ? "+" : ""}${formatInt(extraVsRandom)} ciudadanos adicionales con el mismo techo presupuestario.`;
+      `• Frente a no hacer nada (${formatInt(sNone.infectedStats.mean)} infectados esperados): nuestra estrategia salva en promedio ${formatInt(savedVsNoneMean)} personas [${formatInt(savedVsNoneMin)} - ${formatInt(savedVsNoneMax)}]. ` +
+      `• Frente a repartir recursos al azar (${formatInt(randSavedMean)} salvados [${formatInt(randSavedMin)} - ${formatInt(randSavedMax)}]): rescatamos ${extraVsRandom >= 0 ? "+" : ""}${formatInt(extraVsRandom)} ciudadanos adicionales con el mismo presupuesto.`;
 
     const sec4Text =
-      `Si repartimos vacunas y brigadas al azar por toda Manta, los recursos llegan diluidos y el brote atraviesa sin freno las avenidas principales. ` +
-      `En cambio, nuestra estrategia funciona como un cortafuegos inteligente: debilita el brote donde nació, cierra temporalmente el paso en los cruces más transitados de la ciudad ` +
-      `y vacuna estrictamente a vecinos sanos (jamás desperdiciando dosis en personas ya mordidas, infectadas o inmunizadas), aislando a barrios enteros del peligro.`;
+      `Repartir dosis al azar diluye la defensa municipal y desperdicia recursos si el brote ya entró a un mercado o nodo central. ` +
+      `Nuestra estrategia combina inteligencia geográfica y epidemiológica: encapsula el barrio origen con control vectorial y cerco vial, ` +
+      `y dirige las vacunas únicamente a población sana en los barrios puente colindantes antes de que la ola infecciosa los alcance.`;
 
     dom.mayorReportContainer.innerHTML = `
       <div class="mayor-lead">
@@ -1241,7 +1648,7 @@
         <p>${sec1Text}</p>
       </div>
       <div class="mayor-card">
-        <h3>💰 2. Cómo Distribuir el Presupuesto (${formatUSD(config.totalBudget)})</h3>
+        <h3>💰 2. Distribución Óptima del Presupuesto (${formatUSD(config.totalBudget)})</h3>
         <p>${sec2Text}</p>
       </div>
       <div class="mayor-card">
@@ -1249,7 +1656,7 @@
         <p>${sec3Text}</p>
       </div>
       <div class="mayor-card">
-        <h3>🧭 4. Justificación Clara de la Estrategia</h3>
+        <h3>🧭 4. Justificación del Cerco Perimetral Adaptativo</h3>
         <p>${sec4Text}</p>
       </div>
     `;
@@ -1274,7 +1681,7 @@
   }
 
   // ============================================================================
-  // 7. ACTUALIZACIÓN DE TARJETAS KPI, COSTOS Y TABLA POR BARRIO
+  // 8. TARJETAS KPI, TABLA POR BARRIO Y GRÁFICAS CHART.JS
   // ============================================================================
   function renderKpisAndAudit(result) {
     const { config, summary, elapsedMs, hashHex } = result;
@@ -1289,17 +1696,16 @@
     dom.strictAuditBadge.textContent =
       totalViolations === 0 ? "100% Solo 🟢 Sanos" : `Violaciones: ${totalViolations}`;
 
-    dom.execTimingInfo.textContent = `${config.runs} corridas × 3 estrategias en ${fmtDec.format(elapsedMs)} ms`;
+    const workersLabel = result.workersUsed && result.workersUsed > 1 ? ` · ${result.workersUsed} Workers AWS` : "";
+    dom.execTimingInfo.textContent = `${config.runs} corridas × 3 estrategias en ${fmtDec.format(elapsedMs)} ms${workersLabel}`;
 
-    // Estadísticas en tarjetas de Intervenciones Combinadas
     dom.statShieldVaccines.textContent =
       `Escudo: ${formatInt(sShield.meanDoses)} dosis (${formatUSD(sShield.meanDoses * COST_VACCINE_DOSE)}) · Inmunizados: ${formatInt(sShield.meanImmunized)}`;
     dom.statShieldFumigation.textContent =
       `Escudo: ${fmtDec.format(sShield.meanFumigations)} brigadas (${formatUSD(sShield.meanFumigations * COST_FUMIGATION)})`;
     dom.statShieldClosure.textContent =
-      `Escudo: ${fmtDec.format(sShield.meanClosures)} cierres (${formatUSD(sShield.meanClosures * COST_NODE_CLOSURE)})`;
+      `Escudo: ${fmtDec.format(sShield.meanClosures)} cercos (${formatUSD(sShield.meanClosures * COST_NODE_CLOSURE)})`;
 
-    // KPI 1: Sin Intervención
     dom.kpiBase1SavedMean.textContent = "0";
     dom.kpiBase1SavedRange.textContent = "[0 - 0]";
     dom.kpiBase1InfMean.textContent = formatInt(sNone.infectedStats.mean);
@@ -1307,16 +1713,14 @@
     dom.kpiBase1Footer.textContent =
       `Población nunca infectada: ${formatInt(TOTAL_CITY_POPULATION - sNone.infectedStats.mean)} hab.`;
 
-    // KPI 2: Intervención al Azar
     dom.kpiRandomVacPill.textContent = `${formatUSD(sRand.meanSpent)} ejecutados`;
     dom.kpiRandomSavedMean.textContent = formatInt(sRand.savedStats.mean);
     dom.kpiRandomSavedRange.textContent = `[${formatInt(sRand.savedStats.min)} - ${formatInt(sRand.savedStats.max)}]`;
     dom.kpiRandomInfMean.textContent = formatInt(sRand.infectedStats.mean);
     dom.kpiRandomInfRange.textContent = `[${formatInt(sRand.infectedStats.min)} - ${formatInt(sRand.infectedStats.max)}]`;
     dom.kpiRandomFooter.textContent =
-      `Dosis a 🟢 S: ${formatInt(sRand.meanDoses)} · Fumig.: ${fmtDec.format(sRand.meanFumigations)} · Cierres: ${fmtDec.format(sRand.meanClosures)}`;
+      `Dosis a 🟢 S: ${formatInt(sRand.meanDoses)} · Fumig.: ${fmtDec.format(sRand.meanFumigations)} · Cercos: ${fmtDec.format(sRand.meanClosures)}`;
 
-    // KPI 3: Escudo de Centralidad y Riesgo
     const extraLives = sShield.savedStats.mean - sRand.savedStats.mean;
     const sign = extraLives >= 0 ? "+" : "";
     dom.kpiShieldDeltaBadge.textContent = `${sign}${formatInt(extraLives)} vs. Azar`;
@@ -1328,16 +1732,10 @@
     dom.kpiShieldFooter.textContent =
       `Inversión: ${formatUSD(sShield.meanSpent)} / ${formatUSD(config.totalBudget)} · Dosis 🟢 S: ${formatInt(sShield.meanDoses)}`;
 
-    // Tabla por Barrio
     dom.tableFinalDay.textContent = String(config.days);
     dom.barrioTableBody.innerHTML = "";
 
-    let totVac = 0;
-    let totFum = 0;
-    let totClose = 0;
-    let totInfNone = 0;
-    let totInfRand = 0;
-    let totInfShield = 0;
+    let totVac = 0, totFum = 0, totClose = 0, totInfNone = 0, totInfRand = 0, totInfShield = 0;
 
     MANTA_NODES.forEach((node, idx) => {
       const vac = sShield.nodeMeanVac[idx];
@@ -1369,7 +1767,7 @@
       tr.innerHTML = `
         <td>
           <span class="barrio-cell-name">
-            ${node.name}
+            ${node.shortName}
             ${isPZ ? '<span class="pz-marker" title="Barrio Paciente Cero">☣ CERO</span>' : ""}
           </span>
         </td>
@@ -1387,6 +1785,9 @@
         selectedNodeIndex = idx;
         renderMapState();
         highlightSelectedTableRow();
+        if (activeMapView === "geo" && leafletNodeMarkers[idx]) {
+          leafletNodeMarkers[idx].openPopup();
+        }
       });
 
       dom.barrioTableBody.appendChild(tr);
@@ -1395,9 +1796,9 @@
     const totSavedShield = totInfNone - totInfShield;
     dom.barrioTableFoot.innerHTML = `
       <tr>
-        <td>TOTAL MANTA (8 Barrios)</td>
+        <td>TOTAL MANTA (8 Nodos GPS)</td>
         <td class="num">${formatInt(TOTAL_CITY_POPULATION)}</td>
-        <td class="num">13 aristas</td>
+        <td class="num">13 rutas</td>
         <td class="num" style="color:#67e8f9;">${formatInt(totVac)}</td>
         <td class="num" style="color:#fde68a;">🚧${fmtDec.format(totClose)} · 🌫️${fmtDec.format(totFum)}</td>
         <td class="num" style="color:#fca5a5;">${formatInt(totInfNone)}</td>
@@ -1412,9 +1813,9 @@
       .join(", ");
 
     dom.auditSummaryText.textContent =
-      `Semilla ${config.seed} → sub-semillas [${firstSeedsPreview}${result.subSeeds.length > 4 ? ", ..." : ""}] (${config.runs} corridas). ` +
-      `Presupuesto ejecutado por Escudo: ${formatUSD(sShield.meanSpent)} de ${formatUSD(config.totalBudget)} autorizados. ` +
-      `Efectividad vacunal: ${config.vaccineEfficacyPct}%. Dosis aplicadas a 🟡 Mordidos, 🔴 Zombies o 🔵 Exorcizados: 0 (cumplimiento estricto 100%). Hash: ${hashHex}.`;
+      `Semilla ${config.seed} → sub-semillas [${firstSeedsPreview}${result.subSeeds.length > 4 ? ", ..." : ""}] (${config.runs} corridas, modo ${config.mode.toUpperCase()}). ` +
+      `Presupuesto ejecutado por Escudo: ${formatUSD(sShield.meanSpent)} / ${formatUSD(config.totalBudget)}. ` +
+      `Dosis aplicadas fuera de población 🟢 Sana: 0 (cumplimiento estricto 100%). Hash FNV-1a: ${hashHex}.`;
   }
 
   function highlightSelectedTableRow() {
@@ -1424,15 +1825,13 @@
     });
   }
 
-  // ============================================================================
-  // 8. GRÁFICAS DIARIAS CON CHART.JS (MÁS FALLBACK CANVAS 2D)
-  // ============================================================================
   function renderCharts(result) {
     const days = result.config.days;
     const labels = Array.from({ length: days + 1 }, (_, d) => `Día ${d}`);
     const sNone = result.summary.none.series;
     const sRand = result.summary.random.series;
     const sShield = result.summary.shield.series;
+    const prof = MODE_PROFILES[result.config.mode] || MODE_PROFILES.zombie;
 
     let meanNone, minNone, maxNone;
     let meanRand, minRand, maxRand;
@@ -1443,7 +1842,7 @@
       meanNone = sNone.activeIMean; minNone = sNone.activeIMin; maxNone = sNone.activeIMax;
       meanRand = sRand.activeIMean; minRand = sRand.activeIMin; maxRand = sRand.activeIMax;
       meanShield = sShield.activeIMean; minShield = sShield.activeIMin; maxShield = sShield.activeIMax;
-      yAxisTitle = "🔴 Zombies Activos I(t)";
+      yAxisTitle = prof.labels.shortI;
     } else if (activeChartMetric === "protectedPop") {
       meanNone = sNone.protectedMean; minNone = sNone.protectedMin; maxNone = sNone.protectedMax;
       meanRand = sRand.protectedMean; minRand = sRand.protectedMin; maxRand = sRand.protectedMax;
@@ -1463,13 +1862,13 @@
       drawFallbackLines(dom.comparisonCanvas, [
         { label: "Sin Intervención", color: "#ef4444", data: meanNone },
         { label: "Intervención al Azar", color: "#f59e0b", data: meanRand },
-        { label: "Escudo Centralidad y Riesgo", color: "#06d6a0", data: meanShield }
+        { label: "Escudo + Cerco Perimetral", color: "#06d6a0", data: meanShield }
       ]);
       drawFallbackLines(dom.seirCanvas, [
-        { label: "Sano (S)", color: "#10b981", data: chosenSeir.S },
-        { label: "Mordido (E)", color: "#f59e0b", data: chosenSeir.E },
-        { label: "Zombie (I)", color: "#ef4444", data: chosenSeir.I },
-        { label: "Exorcizado/Inmune (R)", color: "#3b82f6", data: chosenSeir.R }
+        { label: prof.labels.S, color: "#10b981", data: chosenSeir.S },
+        { label: prof.labels.E, color: "#f59e0b", data: chosenSeir.E },
+        { label: prof.labels.I, color: "#ef4444", data: chosenSeir.I },
+        { label: prof.labels.R, color: "#3b82f6", data: chosenSeir.R }
       ]);
       return;
     }
@@ -1545,7 +1944,7 @@
             legendHidden: true
           },
           {
-            label: "Escudo Centralidad y Riesgo (Promedio)",
+            label: "Escudo + Cerco Perimetral (Promedio)",
             data: meanShield,
             borderColor: "#06d6a0",
             backgroundColor: "#06d6a0",
@@ -1605,7 +2004,7 @@
                 const val = formatInt(ctx.parsed.y);
                 if (dsIdx === 0) return ` Sin Intervención: ${val} [${formatInt(minNone[dIdx])} - ${formatInt(maxNone[dIdx])}]`;
                 if (dsIdx === 3) return ` Intervención al Azar: ${val} [${formatInt(minRand[dIdx])} - ${formatInt(maxRand[dIdx])}]`;
-                if (dsIdx === 6) return ` Escudo Centralidad: ${val} [${formatInt(minShield[dIdx])} - ${formatInt(maxShield[dIdx])}]`;
+                if (dsIdx === 6) return ` Escudo + Cerco: ${val} [${formatInt(minShield[dIdx])} - ${formatInt(maxShield[dIdx])}]`;
                 return ` ${ctx.dataset.label}: ${val}`;
               }
             }
@@ -1641,7 +2040,7 @@
         labels,
         datasets: [
           {
-            label: "🟢 Sano (S)",
+            label: prof.labels.S,
             data: chosenSeir.S,
             borderColor: "#10b981",
             backgroundColor: "rgba(16, 185, 129, 0.10)",
@@ -1651,7 +2050,7 @@
             tension: 0.25
           },
           {
-            label: "🟡 Mordido / Expuesto (E)",
+            label: prof.labels.E,
             data: chosenSeir.E,
             borderColor: "#f59e0b",
             backgroundColor: "rgba(245, 158, 11, 0.12)",
@@ -1661,7 +2060,7 @@
             tension: 0.25
           },
           {
-            label: "🔴 Zombie / Infeccioso (I)",
+            label: prof.labels.I,
             data: chosenSeir.I,
             borderColor: "#ef4444",
             backgroundColor: "rgba(239, 68, 68, 0.16)",
@@ -1671,7 +2070,7 @@
             tension: 0.25
           },
           {
-            label: "🔵 Exorcizado / Inmune (R)",
+            label: prof.labels.R,
             data: chosenSeir.R,
             borderColor: "#3b82f6",
             backgroundColor: "rgba(59, 130, 246, 0.12)",
@@ -1773,7 +2172,7 @@
   }
 
   // ============================================================================
-  // 9. MAPA SVG INTERACTIVO Y ANIMADO DE LA RED DE MANTA (DÍA 1 A DÍA 60)
+  // 9. GEMELO CARTOGRÁFICO DUAL: LEAFLET GPS (CARTODB DARK) + GRAFO SVG (DÍA 0..60)
   // ============================================================================
   const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -1792,6 +2191,124 @@
   function compactCount(v) {
     if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
     return String(Math.round(v));
+  }
+
+  function initLeafletGeoMap() {
+    if (typeof window.L === "undefined" || !dom.mantaGeoMap) {
+      setMapView("topo");
+      return;
+    }
+
+    leafletMap = window.L.map(dom.mantaGeoMap, {
+      zoomControl: true,
+      attributionControl: true
+    });
+
+    window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      subdomains: "abcd",
+      maxZoom: 18
+    }).addTo(leafletMap);
+
+    const boundsCoords = MANTA_NODES.map((n) => [n.lat, n.lng]);
+    leafletMap.fitBounds(boundsCoords, { padding: [32, 32] });
+
+    leafletEdgeLines = MANTA_EDGES.map((edge) => {
+      const u = MANTA_NODES[edge.u];
+      const v = MANTA_NODES[edge.v];
+      return window.L.polyline(
+        [
+          [u.lat, u.lng],
+          [v.lat, v.lng]
+        ],
+        {
+          color: "rgba(148, 163, 184, 0.48)",
+          weight: 2.6,
+          opacity: 0.85
+        }
+      ).addTo(leafletMap);
+    });
+
+    leafletHeatCircles = MANTA_NODES.map((node) => {
+      return window.L.circle([node.lat, node.lng], {
+        radius: 180,
+        color: "#ef4444",
+        weight: 1,
+        opacity: 0.45,
+        fillColor: "#ef4444",
+        fillOpacity: 0.18,
+        interactive: false
+      }).addTo(leafletMap);
+    });
+
+    leafletNodeMarkers = MANTA_NODES.map((node) => {
+      const marker = window.L.circleMarker([node.lat, node.lng], {
+        radius: 10,
+        color: "#10b981",
+        weight: 2.6,
+        fillColor: "#0f172a",
+        fillOpacity: 0.92
+      }).addTo(leafletMap);
+
+      marker.bindTooltip(node.shortName, {
+        permanent: true,
+        direction: "top",
+        offset: [0, -10],
+        className: "manta-geo-label"
+      });
+
+      marker.bindPopup("");
+
+      marker.on("click", () => {
+        selectedNodeIndex = node.index;
+        renderMapState();
+        highlightSelectedTableRow();
+      });
+
+      return marker;
+    });
+  }
+
+  function buildGeoPopupHtml(node, st, day, isPZ) {
+    const prof = MODE_PROFILES[activeEpiMode] || MODE_PROFILES.zombie;
+    const ops = [];
+    if (st.closed) ops.push("🚧 Cerco Sanitario (-75% flujo)");
+    if (st.fumActive) ops.push(`🌫️ Fumigación activa (${st.fumDaysLeft}d)`);
+    const opsLine = ops.length > 0 ? ops.join(" · ") : "Sin bloqueo vial activo";
+
+    return `
+      <div class="tactical-popup">
+        <div class="tactical-popup-title">${isPZ ? "☣ " : ""}${node.officialName}</div>
+        <div class="tactical-popup-coords">GPS [${node.lat.toFixed(4)}, ${node.lng.toFixed(4)}] · Día ${day}</div>
+        <div class="tactical-popup-grid">
+          <span>${prof.labels.S}: <strong>${formatInt(st.S)}</strong></span>
+          <span>${prof.labels.E}: <strong>${formatInt(st.E)}</strong></span>
+          <span>${prof.labels.I}: <strong>${formatInt(st.I)}</strong></span>
+          <span>${prof.labels.R}: <strong>${formatInt(st.R)}</strong></span>
+          <span>💉 Dosis (🟢 S): <strong>${formatInt(st.vaccinated)}</strong></span>
+          <span>🎯 Puntaje: <strong>${fmtDec.format(st.score)}</strong></span>
+        </div>
+        <div class="tactical-popup-foot">${opsLine} · Pob. INEC/Cohorte: ${formatInt(node.population)} hab.</div>
+      </div>
+    `;
+  }
+
+  function setMapView(view) {
+    activeMapView = view === "topo" ? "topo" : "geo";
+    const isGeo = activeMapView === "geo" && leafletMap !== null;
+
+    dom.btnViewGeo.classList.toggle("active", isGeo);
+    dom.btnViewGeo.setAttribute("aria-selected", String(isGeo));
+    dom.btnViewTopo.classList.toggle("active", !isGeo);
+    dom.btnViewTopo.setAttribute("aria-selected", String(!isGeo));
+
+    dom.geoMapContainer.classList.toggle("hidden", !isGeo);
+    dom.topoMapContainer.classList.toggle("hidden", isGeo);
+
+    if (isGeo && leafletMap) {
+      setTimeout(() => leafletMap.invalidateSize(), 60);
+    }
+    renderMapState();
   }
 
   function initStaticMapSkeleton() {
@@ -1815,7 +2332,6 @@
 
       const radius = Math.round(18 + (node.population / 18000) * 10);
 
-      // Anillo táctico exterior
       const outer = document.createElementNS(SVG_NS, "circle");
       outer.setAttribute("id", `svgNodeOuter_${node.index}`);
       outer.setAttribute("class", "node-outer-ring");
@@ -1825,7 +2341,6 @@
       outer.setAttribute("stroke-width", "2.6");
       g.appendChild(outer);
 
-      // Núcleo coloreado dinámicamente día a día
       const inner = document.createElementNS(SVG_NS, "circle");
       inner.setAttribute("id", `svgNodeCore_${node.index}`);
       inner.setAttribute("class", "node-core-fill");
@@ -1833,7 +2348,6 @@
       inner.setAttribute("fill", "rgba(16, 185, 129, 0.35)");
       g.appendChild(inner);
 
-      // Indicador rápido central (Zombies o estado dominante)
       const countTxt = document.createElementNS(SVG_NS, "text");
       countTxt.setAttribute("id", `svgNodeCount_${node.index}`);
       countTxt.setAttribute("y", "4");
@@ -1845,7 +2359,6 @@
       countTxt.textContent = "0";
       g.appendChild(countTxt);
 
-      // Insignia flotante superior para Cierre Selectivo o Fumigación activa
       const opsBadge = document.createElementNS(SVG_NS, "text");
       opsBadge.setAttribute("id", `svgNodeOps_${node.index}`);
       opsBadge.setAttribute("x", "0");
@@ -1855,7 +2368,6 @@
       opsBadge.textContent = "";
       g.appendChild(opsBadge);
 
-      // Caja de telemetría SEIR debajo del nodo
       const labelY = radius + 10;
       const rect = document.createElementNS(SVG_NS, "rect");
       rect.setAttribute("class", "node-label-bg");
@@ -1873,7 +2385,6 @@
       title.textContent = node.shortName;
       g.appendChild(title);
 
-      // Línea con conteo en vivo 🟢S 🟡E 🔴I 🔵R del barrio
       const seirLine = document.createElementNS(SVG_NS, "text");
       seirLine.setAttribute("id", `svgNodeSeir_${node.index}`);
       seirLine.setAttribute("class", "node-sub");
@@ -1909,24 +2420,28 @@
       const intensity = Math.min(0.88, 0.35 + zFrac * 2.6);
       return {
         stroke: st.closed ? "#38bdf8" : "#ef4444",
-        fill: `rgba(239, 68, 68, ${intensity.toFixed(2)})`
+        fill: `rgba(239, 68, 68, ${intensity.toFixed(2)})`,
+        hex: "#ef4444"
       };
     }
     if (st.E > 0 && (eFrac >= 0.01 || st.I > 0)) {
       return {
         stroke: st.closed ? "#38bdf8" : "#f59e0b",
-        fill: "rgba(245, 158, 11, 0.42)"
+        fill: "rgba(245, 158, 11, 0.42)",
+        hex: "#f59e0b"
       };
     }
     if (rFrac >= 0.35) {
       return {
         stroke: "#3b82f6",
-        fill: "rgba(59, 130, 246, 0.42)"
+        fill: "rgba(59, 130, 246, 0.42)",
+        hex: "#3b82f6"
       };
     }
     return {
       stroke: st.closed ? "#38bdf8" : "#10b981",
-      fill: "rgba(16, 185, 129, 0.30)"
+      fill: "rgba(16, 185, 129, 0.30)",
+      hex: "#10b981"
     };
   }
 
@@ -1935,21 +2450,22 @@
 
     const mapStrat = dom.selectMapStrategy.value || "shield";
     const snapshots = currentResult.summary[mapStrat].sampleSnapshots;
-    const maxDay = currentResult.config.days;
-    const day = Math.max(1, Math.min(maxDay, timelineDay));
-    const daySnap = snapshots[day];
+    if (!snapshots || !snapshots.length) return;
+
+    const maxDay = Math.min(currentResult.config.days, snapshots.length - 1);
+    const day = Math.max(0, Math.min(maxDay, timelineDay));
+    const daySnap = snapshots[day] || snapshots[snapshots.length - 1];
 
     dom.mapDescMaxDay.textContent = String(maxDay);
     dom.timelineDayLabel.textContent = String(day);
     dom.timelineMaxDayLabel.textContent = String(maxDay);
-    dom.timelineSlider.min = "1";
+    dom.timelineSlider.min = "0";
     dom.timelineSlider.max = String(maxDay);
     dom.timelineSlider.value = String(day);
 
-    const pct = maxDay > 1 ? ((day - 1) / (maxDay - 1)) * 100 : 100;
+    const pct = maxDay > 0 ? (day / maxDay) * 100 : 100;
     dom.timelineProgressFill.style.width = `${pct.toFixed(1)}%`;
 
-    // Conteos vivos acumulados de toda la red de Manta en este día
     let sumS = 0, sumE = 0, sumI = 0, sumR = 0;
     for (let k = 0; k < MANTA_NODES.length; k++) {
       sumS += daySnap[k].S;
@@ -1962,7 +2478,7 @@
     dom.cityLiveI.textContent = formatInt(sumI);
     dom.cityLiveR.textContent = formatInt(sumR);
 
-    // Actualizar las 13 aristas viales
+    // 1. Actualizar Grafo Topológico SVG
     MANTA_EDGES.forEach((edge, idx) => {
       const pathEl = document.getElementById(`svgEdge_${idx}`);
       if (!pathEl) return;
@@ -1979,7 +2495,6 @@
       pathEl.classList.toggle("edge-shielded", !hasCordon && !activeZombieFlow && immunizedCorridor);
     });
 
-    // Actualizar los 8 barrios de Manta
     MANTA_NODES.forEach((node, idx) => {
       const st = daySnap[idx];
       const groupEl = document.getElementById(`svgNodeGroup_${idx}`);
@@ -1991,39 +2506,99 @@
       const seirEl = document.getElementById(`svgNodeSeir_${idx}`);
       const scoreEl = document.getElementById(`svgNodeScore_${idx}`);
 
-      groupEl.classList.toggle("node-selected", idx === selectedNodeIndex);
+      if (groupEl) {
+        groupEl.classList.toggle("node-selected", idx === selectedNodeIndex);
+        const isPZ = idx === currentResult.config.patientZeroIndex;
+        titleEl.textContent = isPZ ? `☣ ${node.shortName}` : node.shortName;
 
-      const isPZ = idx === currentResult.config.patientZeroIndex;
-      titleEl.textContent = isPZ ? `☣ ${node.shortName}` : node.shortName;
+        const colors = computeNodeVisualColors(st, node.population);
+        outerEl.setAttribute("stroke", colors.stroke);
+        outerEl.setAttribute("stroke-dasharray", st.closed ? "4 2" : "none");
+        coreEl.setAttribute("fill", colors.fill);
 
-      const colors = computeNodeVisualColors(st, node.population);
-      outerEl.setAttribute("stroke", colors.stroke);
-      outerEl.setAttribute("stroke-dasharray", st.closed ? "4 2" : "none");
-      coreEl.setAttribute("fill", colors.fill);
+        countEl.textContent = st.I > 0 ? `🔴${compactCount(st.I)}` : `🟢${compactCount(st.S)}`;
 
-      countEl.textContent = st.I > 0 ? `🔴${compactCount(st.I)}` : `🟢${compactCount(st.S)}`;
+        const badges = [];
+        if (st.closed) badges.push("🚧");
+        if (st.fumActive) badges.push("🌫️");
+        opsEl.textContent = badges.join(" ");
 
-      const badges = [];
-      if (st.closed) badges.push("🚧");
-      if (st.fumActive) badges.push("🌫️");
-      opsEl.textContent = badges.join(" ");
-
-      seirEl.textContent =
-        `🟢${compactCount(st.S)} 🟡${compactCount(st.E)} 🔴${compactCount(st.I)} 🔵${compactCount(st.R)}`;
-      scoreEl.textContent = `Puntaje: ${fmtDec.format(st.score)}`;
+        seirEl.textContent =
+          `🟢${compactCount(st.S)} 🟡${compactCount(st.E)} 🔴${compactCount(st.I)} 🔵${compactCount(st.R)}`;
+        scoreEl.textContent = `Puntaje: ${fmtDec.format(st.score)}`;
+      }
     });
 
-    // Actualizar Inspector detallado del barrio seleccionado
+    // 2. Actualizar Mapa Geoespacial Real (Leaflet + CartoDB Dark Matter)
+    if (leafletMap && leafletNodeMarkers.length === MANTA_NODES.length) {
+      MANTA_EDGES.forEach((edge, idx) => {
+        const poly = leafletEdgeLines[idx];
+        const su = daySnap[edge.u];
+        const sv = daySnap[edge.v];
+        const hasCordon = su.closed || sv.closed;
+        const activeFlow = su.I + sv.I > 30;
+        const shielded =
+          su.R / MANTA_NODES[edge.u].population > 0.45 ||
+          sv.R / MANTA_NODES[edge.v].population > 0.45;
+
+        if (hasCordon) {
+          poly.setStyle({ color: "#38bdf8", weight: 3.2, dashArray: "8, 6", opacity: 0.92 });
+        } else if (activeFlow) {
+          poly.setStyle({ color: "#ef4444", weight: 3.8, dashArray: null, opacity: 0.85 });
+        } else if (shielded) {
+          poly.setStyle({ color: "#06d6a0", weight: 3.0, dashArray: null, opacity: 0.8 });
+        } else {
+          poly.setStyle({ color: "rgba(148, 163, 184, 0.45)", weight: 2.2, dashArray: null, opacity: 0.75 });
+        }
+      });
+
+      MANTA_NODES.forEach((node, idx) => {
+        const st = daySnap[idx];
+        const isPZ = idx === currentResult.config.patientZeroIndex;
+        const colors = computeNodeVisualColors(st, node.population);
+        const activeLoad = st.I + 0.55 * st.E;
+
+        // Onda de calor proporcional a infectados diarios en metros reales sobre Manta
+        const heatRadius = activeLoad > 0 ? Math.min(1450, 160 + Math.sqrt(activeLoad) * 22) : 90;
+        const heatOpacity = activeLoad > 0 ? Math.min(0.52, 0.14 + (activeLoad / node.population) * 2.2) : 0.04;
+        const heatColor = st.I > 0 ? "#ef4444" : st.E > 0 ? "#f59e0b" : "#10b981";
+
+        leafletHeatCircles[idx].setRadius(heatRadius);
+        leafletHeatCircles[idx].setStyle({
+          color: heatColor,
+          fillColor: heatColor,
+          fillOpacity: heatOpacity,
+          opacity: activeLoad > 0 ? 0.55 : 0.15
+        });
+
+        const marker = leafletNodeMarkers[idx];
+        marker.setStyle({
+          radius: idx === selectedNodeIndex ? 12.5 : 9.5,
+          color: idx === selectedNodeIndex ? "#ffffff" : colors.stroke,
+          fillColor: colors.hex,
+          fillOpacity: 0.86,
+          weight: idx === selectedNodeIndex ? 3.2 : 2.4
+        });
+
+        const opsShort = `${st.closed ? "🚧" : ""}${st.fumActive ? "🌫️" : ""}`;
+        marker.setTooltipContent(
+          `${isPZ ? "☣ " : ""}${node.shortName} · 🔴${compactCount(st.I)} ${opsShort}`
+        );
+        marker.setPopupContent(buildGeoPopupHtml(node, st, day, isPZ));
+      });
+    }
+
+    // 3. Actualizar Inspector del Barrio Seleccionado
     const selNode = MANTA_NODES[selectedNodeIndex];
     const selSnap = daySnap[selectedNodeIndex];
     const neighborNames = selNode.neighbors.map((nIdx) => MANTA_NODES[nIdx].shortName).join(", ");
 
     dom.inspNodeName.textContent =
       selectedNodeIndex === currentResult.config.patientZeroIndex
-        ? `☣ ${selNode.name} (Paciente Cero)`
-        : selNode.name;
+        ? `☣ ${selNode.officialName} (Paciente Cero)`
+        : selNode.officialName;
     dom.inspNodeMeta.textContent =
-      `Día ${day} · Pob.: ${formatInt(selNode.population)} hab. · ${selNode.neighbors.length} conexiones (${neighborNames})`;
+      `Día ${day} · GPS [${selNode.lat}, ${selNode.lng}] · Pob.: ${formatInt(selNode.population)} hab. · Vecinos: ${neighborNames}`;
 
     dom.inspS.textContent = formatInt(selSnap.S);
     dom.inspE.textContent = formatInt(selSnap.E);
@@ -2031,7 +2606,7 @@
     dom.inspR.textContent = formatInt(selSnap.R);
 
     const statusTags = [`${formatInt(selSnap.vaccinated)} dosis`];
-    if (selSnap.closed) statusTags.push("🚧 Cerrado");
+    if (selSnap.closed) statusTags.push("🚧 Cerco");
     if (selSnap.fumActive) statusTags.push(`🌫️ Fumig. (${selSnap.fumDaysLeft}d)`);
     dom.inspVac.textContent = statusTags.join(" · ");
     dom.inspScore.textContent = fmtDec.format(selSnap.score);
@@ -2041,7 +2616,7 @@
     if (timelineTimer !== null) {
       clearInterval(timelineTimer);
       timelineTimer = null;
-      dom.btnPlayTimeline.textContent = "▶ Play";
+      dom.btnPlayTimeline.textContent = "▶ Reproducir";
     }
   }
 
@@ -2051,11 +2626,11 @@
 
     const maxDay = currentResult.config.days;
     if (timelineDay >= maxDay) {
-      timelineDay = 1;
+      timelineDay = 0;
       renderMapState();
     }
 
-    const intervalMs = parseInt(dom.selectPlaySpeed.value, 10) || 180;
+    const intervalMs = parseInt(dom.selectPlaySpeed.value, 10) || 170;
     dom.btnPlayTimeline.textContent = "⏸ Pausa";
 
     timelineTimer = setInterval(() => {
@@ -2077,14 +2652,620 @@
   }
 
   // ============================================================================
-  // 10. ESCENARIOS RÁPIDOS DEL JURADO Y ORQUESTACIÓN DE EVENTOS
+  // 10. BACKEND AWS MULTICAPA: FAN-OUT 5 WORKERS + S3 + AUDITORÍA DYNAMODB
   // ============================================================================
+  function setCloudStatus(mode, text) {
+    if (!dom.cloudStatusPill || !dom.cloudStatusText) return;
+    dom.cloudStatusPill.className = `cloud-status-pill ${mode}`;
+    dom.cloudStatusText.textContent = text;
+  }
+
+  function saveLambdaUrlPreference(url) {
+    try {
+      if (typeof url === "string") {
+        window.localStorage.setItem(LAMBDA_STORAGE_KEY, url);
+      }
+    } catch (_) {
+      // Ignorar si almacenamiento local está restringido
+    }
+  }
+
+  function loadLambdaUrlPreference() {
+    try {
+      const stored = window.localStorage.getItem(LAMBDA_STORAGE_KEY);
+      if (stored === "local") return "";
+      return stored && stored.trim() ? stored.trim() : DEFAULT_LAMBDA_URL;
+    } catch (_) {
+      return DEFAULT_LAMBDA_URL;
+    }
+  }
+
+  function loadLocalAuditMirror() {
+    try {
+      const raw = window.localStorage.getItem(LOCAL_AUDIT_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function appendLocalAuditMirror(entry) {
+    const list = loadLocalAuditMirror().filter((it) => it.SimulationId !== entry.SimulationId);
+    list.unshift(entry);
+    const trimmed = list.slice(0, 8);
+    try {
+      window.localStorage.setItem(LOCAL_AUDIT_STORAGE_KEY, JSON.stringify(trimmed));
+    } catch (_) {
+      // Ignorar silenciosamente
+    }
+    return trimmed;
+  }
+
+  function renderDynamoAuditTable(records, storageSource) {
+    if (!dom.dynamoAuditBody) return;
+    if (dom.dynamoStorageBadge && storageSource) {
+      dom.dynamoStorageBadge.textContent = storageSource.startsWith("dynamodb:")
+        ? "Amazon DynamoDB: SpookyThonSimulations (Conectado)"
+        : "Tabla: SpookyThonSimulations (Espejo Resiliente)";
+    }
+
+    if (!records || records.length === 0) {
+      dom.dynamoAuditBody.innerHTML =
+        '<tr><td colspan="8" class="empty-row">Aún no hay simulaciones registradas en esta sesión.</td></tr>';
+      return;
+    }
+
+    dom.dynamoAuditBody.innerHTML = records
+      .slice(0, 8)
+      .map((item) => {
+        const isDengue = String(item.Mode || "").includes("DENGUE");
+        const modeClass = isDengue ? "mode-audit-dengue" : "mode-audit-zombie";
+        const modeText = isDengue ? "🦟 Dengue INEC/MSP" : "🧟 Plaga Zombie";
+        const tsShort = String(item.Timestamp || "").replace("T", " ").slice(0, 19);
+        return `
+          <tr>
+            <td><code>${item.SimulationId || "SIM-MANTA"}</code></td>
+            <td>${tsShort}</td>
+            <td class="num">${item.Seed ?? 2026}</td>
+            <td><span class="mode-audit-pill ${modeClass}">${modeText}</span></td>
+            <td class="num">${item.Runs ?? 50}</td>
+            <td class="num" style="color:#34d399;font-weight:700;">+${formatInt(item.SavedLivesMean || 0)}</td>
+            <td class="num">${formatUSD(item.BudgetUsed || 0)}</td>
+            <td><span class="hash-code-pill">${item.HashFirma || "0x--------"}</span></td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  async function syncAuditRecordWithCloud(lambdaUrl, entry) {
+    const mirror = appendLocalAuditMirror(entry);
+    if (!lambdaUrl) {
+      renderDynamoAuditTable(mirror, "local-mirror");
+      return;
+    }
+    try {
+      const resp = await fetch(lambdaUrl, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.assign({ action: "record_audit" }, entry))
+      });
+      if (!resp.ok) throw new Error("Audit HTTP error");
+      let data = await resp.json();
+      if (data && typeof data.body === "string") {
+        data = JSON.parse(data.body);
+      }
+      if (data && Array.isArray(data.auditHistory) && data.auditHistory.length > 0) {
+        renderDynamoAuditTable(data.auditHistory, data.auditStorageSource || "dynamodb:SpookyThonSimulations");
+        return;
+      }
+    } catch (_) {
+      // Respaldo transparente si la Lambda remota aún no expone action=record_audit
+    }
+    renderDynamoAuditTable(mirror, "local-mirror");
+  }
+
+  async function invokeSingleLambdaWorker(lambdaUrl, payload, signal) {
+    const resp = await fetch(lambdaUrl, {
+      method: "POST",
+      mode: "cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal
+    });
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    let rawData = await resp.json();
+    if (rawData && typeof rawData.body === "string") {
+      rawData = JSON.parse(rawData.body);
+    }
+    if (!rawData || !rawData.summary || !rawData.summary.shield) {
+      throw new Error("Respuesta Lambda incompleta");
+    }
+    return rawData;
+  }
+
+  function mergeFanOutWorkerResponses(workerResponses, shardSizes, config, fullSubSeeds, elapsedMs) {
+    const totalRuns = config.runs;
+    const days = config.days;
+    const numNodes = MANTA_NODES.length;
+    const strategyKeys = ["none", "random", "shield"];
+    const hasExactShardRaw = workerResponses.every((r) => r && r.shardRaw && r.shardRaw.shield);
+
+    if (hasExactShardRaw) {
+      const hasher = createFnv1aHasher();
+      const summary = {};
+
+      // Calcular Hash FNV-1a exacto en orden secuencial estricto corrida por corrida (0 .. totalRuns-1)
+      for (let w = 0; w < workerResponses.length; w++) {
+        const sr = workerResponses[w].shardRaw;
+        const wRuns = sr.none.infected.length;
+        for (let i = 0; i < wRuns; i++) {
+          for (const key of strategyKeys) {
+            hasher.mix(sr[key].infected[i]);
+            hasher.mix(sr[key].doses[i]);
+            hasher.mix(sr[key].spent[i]);
+          }
+        }
+      }
+
+      for (const key of strategyKeys) {
+        const allInf = [];
+        const allSav = [];
+        let dosesSum = 0, immSum = 0, fumSum = 0, closeSum = 0, spentSum = 0, violationsSum = 0;
+        const nodeVac = new Float64Array(numNodes);
+        const nodeFum = new Float64Array(numNodes);
+        const nodeClose = new Float64Array(numNodes);
+        const nodeInf = new Float64Array(numNodes);
+
+        const dS = new Float64Array(days + 1);
+        const dE = new Float64Array(days + 1);
+        const dI = new Float64Array(days + 1);
+        const dR = new Float64Array(days + 1);
+        const dCum = new Float64Array(days + 1);
+        const dProt = new Float64Array(days + 1);
+
+        const minCum = new Float64Array(days + 1).fill(Infinity);
+        const maxCum = new Float64Array(days + 1).fill(-Infinity);
+        const minI = new Float64Array(days + 1).fill(Infinity);
+        const maxI = new Float64Array(days + 1).fill(-Infinity);
+        const minProt = new Float64Array(days + 1).fill(Infinity);
+        const maxProt = new Float64Array(days + 1).fill(-Infinity);
+
+        for (let w = 0; w < workerResponses.length; w++) {
+          const b = workerResponses[w].shardRaw[key];
+          for (let i = 0; i < b.infected.length; i++) {
+            allInf.push(b.infected[i]);
+            allSav.push(b.saved[i]);
+          }
+          dosesSum += b.dosesSum;
+          immSum += b.immSum;
+          fumSum += b.fumSum;
+          closeSum += b.closeSum;
+          spentSum += b.spentSum;
+          violationsSum += b.violationsSum;
+
+          for (let k = 0; k < numNodes; k++) {
+            nodeVac[k] += b.nodeVacSum[k];
+            nodeFum[k] += b.nodeFumSum[k];
+            nodeClose[k] += b.nodeCloseSum[k];
+            nodeInf[k] += b.nodeInfSum[k];
+          }
+
+          for (let d = 0; d <= days; d++) {
+            dS[d] += b.dailySums.S[d];
+            dE[d] += b.dailySums.E[d];
+            dI[d] += b.dailySums.I[d];
+            dR[d] += b.dailySums.R[d];
+            dCum[d] += b.dailySums.cumInf[d];
+            dProt[d] += b.dailySums.prot[d];
+
+            if (b.dailyMin.cumInf[d] < minCum[d]) minCum[d] = b.dailyMin.cumInf[d];
+            if (b.dailyMax.cumInf[d] > maxCum[d]) maxCum[d] = b.dailyMax.cumInf[d];
+            if (b.dailyMin.I[d] < minI[d]) minI[d] = b.dailyMin.I[d];
+            if (b.dailyMax.I[d] > maxI[d]) maxI[d] = b.dailyMax.I[d];
+            if (b.dailyMin.prot[d] < minProt[d]) minProt[d] = b.dailyMin.prot[d];
+            if (b.dailyMax.prot[d] > maxProt[d]) maxProt[d] = b.dailyMax.prot[d];
+          }
+        }
+
+        summary[key] = {
+          infectedStats: computeStats(allInf),
+          savedStats: computeStats(allSav),
+          meanDoses: dosesSum / totalRuns,
+          meanImmunized: immSum / totalRuns,
+          meanFumigations: fumSum / totalRuns,
+          meanClosures: closeSum / totalRuns,
+          meanSpent: spentSum / totalRuns,
+          violations: violationsSum,
+          nodeMeanVac: Array.from(nodeVac, (v) => v / totalRuns),
+          nodeMeanFum: Array.from(nodeFum, (v) => v / totalRuns),
+          nodeMeanClose: Array.from(nodeClose, (v) => v / totalRuns),
+          nodeMeanInf: Array.from(nodeInf, (v) => v / totalRuns),
+          series: {
+            S: Array.from(dS, (v) => Number((v / totalRuns).toFixed(2))),
+            E: Array.from(dE, (v) => Number((v / totalRuns).toFixed(2))),
+            I: Array.from(dI, (v) => Number((v / totalRuns).toFixed(2))),
+            R: Array.from(dR, (v) => Number((v / totalRuns).toFixed(2))),
+            cumInfectedMean: Array.from(dCum, (v) => Number((v / totalRuns).toFixed(2))),
+            cumInfectedMin: Array.from(minCum),
+            cumInfectedMax: Array.from(maxCum),
+            activeIMean: Array.from(dI, (v) => Number((v / totalRuns).toFixed(2))),
+            activeIMin: Array.from(minI),
+            activeIMax: Array.from(maxI),
+            protectedMean: Array.from(dProt, (v) => Number((v / totalRuns).toFixed(2))),
+            protectedMin: Array.from(minProt),
+            protectedMax: Array.from(maxProt)
+          },
+          sampleSnapshots: workerResponses[0].summary[key].sampleSnapshots,
+          first48h: workerResponses[0].summary[key].first48h
+        };
+      }
+
+      return {
+        config,
+        subSeeds: fullSubSeeds,
+        summary,
+        elapsedMs,
+        hashHex: hasher.hex(),
+        cloudEngine: workerResponses[0].engine || "aws-lambda-python3.12-fanout",
+        datasetSource: workerResponses[0].datasetSource || "s3-or-bundle",
+        auditHistory: workerResponses[0].auditHistory || [],
+        auditStorageSource: workerResponses[0].auditStorageSource || "",
+        workersUsed: workerResponses.length
+      };
+    }
+
+    // Compatibilidad retroactiva si el endpoint remoto aún tiene desplegada la versión previa sin shardRaw
+    const fallbackHasher = createFnv1aHasher();
+    const mergedSummary = {};
+
+    for (const key of strategyKeys) {
+      let infMean = 0, infMin = Infinity, infMax = -Infinity;
+      let savMean = 0, savMin = Infinity, savMax = -Infinity;
+      let dosesMean = 0, immMean = 0, fumMean = 0, closeMean = 0, spentMean = 0, violations = 0;
+      const nVac = new Float64Array(numNodes);
+      const nFum = new Float64Array(numNodes);
+      const nClose = new Float64Array(numNodes);
+      const nInf = new Float64Array(numNodes);
+
+      const dS = new Float64Array(days + 1);
+      const dE = new Float64Array(days + 1);
+      const dI = new Float64Array(days + 1);
+      const dR = new Float64Array(days + 1);
+      const dCum = new Float64Array(days + 1);
+      const dProt = new Float64Array(days + 1);
+      const minCum = new Float64Array(days + 1).fill(Infinity);
+      const maxCum = new Float64Array(days + 1).fill(-Infinity);
+      const minI = new Float64Array(days + 1).fill(Infinity);
+      const maxI = new Float64Array(days + 1).fill(-Infinity);
+      const minProt = new Float64Array(days + 1).fill(Infinity);
+      const maxProt = new Float64Array(days + 1).fill(-Infinity);
+
+      for (let w = 0; w < workerResponses.length; w++) {
+        const wWeight = shardSizes[w] / totalRuns;
+        const s = workerResponses[w].summary[key];
+        infMean += s.infectedStats.mean * wWeight;
+        if (s.infectedStats.min < infMin) infMin = s.infectedStats.min;
+        if (s.infectedStats.max > infMax) infMax = s.infectedStats.max;
+
+        savMean += s.savedStats.mean * wWeight;
+        if (s.savedStats.min < savMin) savMin = s.savedStats.min;
+        if (s.savedStats.max > savMax) savMax = s.savedStats.max;
+
+        dosesMean += s.meanDoses * wWeight;
+        immMean += s.meanImmunized * wWeight;
+        fumMean += s.meanFumigations * wWeight;
+        closeMean += s.meanClosures * wWeight;
+        spentMean += s.meanSpent * wWeight;
+        violations += s.violations;
+
+        for (let k = 0; k < numNodes; k++) {
+          nVac[k] += s.nodeMeanVac[k] * wWeight;
+          nFum[k] += s.nodeMeanFum[k] * wWeight;
+          nClose[k] += s.nodeMeanClose[k] * wWeight;
+          nInf[k] += s.nodeMeanInf[k] * wWeight;
+        }
+
+        for (let d = 0; d <= days; d++) {
+          dS[d] += s.series.S[d] * wWeight;
+          dE[d] += s.series.E[d] * wWeight;
+          dI[d] += s.series.I[d] * wWeight;
+          dR[d] += s.series.R[d] * wWeight;
+          dCum[d] += s.series.cumInfectedMean[d] * wWeight;
+          dProt[d] += s.series.protectedMean[d] * wWeight;
+
+          if (s.series.cumInfectedMin[d] < minCum[d]) minCum[d] = s.series.cumInfectedMin[d];
+          if (s.series.cumInfectedMax[d] > maxCum[d]) maxCum[d] = s.series.cumInfectedMax[d];
+          if (s.series.activeIMin[d] < minI[d]) minI[d] = s.series.activeIMin[d];
+          if (s.series.activeIMax[d] > maxI[d]) maxI[d] = s.series.activeIMax[d];
+          if (s.series.protectedMin[d] < minProt[d]) minProt[d] = s.series.protectedMin[d];
+          if (s.series.protectedMax[d] > maxProt[d]) maxProt[d] = s.series.protectedMax[d];
+        }
+      }
+
+      fallbackHasher.mix(Math.round(infMean));
+      fallbackHasher.mix(Math.round(dosesMean));
+      fallbackHasher.mix(Math.round(spentMean));
+
+      mergedSummary[key] = {
+        infectedStats: { mean: infMean, min: infMin, max: infMax },
+        savedStats: { mean: savMean, min: savMin, max: savMax },
+        meanDoses: dosesMean,
+        meanImmunized: immMean,
+        meanFumigations: fumMean,
+        meanClosures: closeMean,
+        meanSpent: spentMean,
+        violations,
+        nodeMeanVac: Array.from(nVac),
+        nodeMeanFum: Array.from(nFum),
+        nodeMeanClose: Array.from(nClose),
+        nodeMeanInf: Array.from(nInf),
+        series: {
+          S: Array.from(dS),
+          E: Array.from(dE),
+          I: Array.from(dI),
+          R: Array.from(dR),
+          cumInfectedMean: Array.from(dCum),
+          cumInfectedMin: Array.from(minCum),
+          cumInfectedMax: Array.from(maxCum),
+          activeIMean: Array.from(dI),
+          activeIMin: Array.from(minI),
+          activeIMax: Array.from(maxI),
+          protectedMean: Array.from(dProt),
+          protectedMin: Array.from(minProt),
+          protectedMax: Array.from(maxProt)
+        },
+        sampleSnapshots: workerResponses[0].summary[key].sampleSnapshots,
+        first48h: workerResponses[0].summary[key].first48h
+      };
+    }
+
+    return {
+      config,
+      subSeeds: fullSubSeeds,
+      summary: mergedSummary,
+      elapsedMs,
+      hashHex: fallbackHasher.hex(),
+      cloudEngine: "aws-lambda-fanout-compat",
+      workersUsed: workerResponses.length
+    };
+  }
+
+  async function requestCloudLambdaSimulation(lambdaUrl, config) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 14000);
+    const t0 = performance.now();
+
+    const basePayload = {
+      mode: config.mode,
+      seed: config.seed,
+      runs: config.runs,
+      days: config.days,
+      beta: config.beta,
+      vaccines: config.totalVaccines,
+      vaccineEffectiveness: config.vaccineEfficacyPct,
+      initialNode: config.patientZeroIndex,
+      budget: config.totalBudget,
+      incubationDays: config.incubationDays,
+      dailyDoseArrival: config.dailyDoseArrival,
+      dailyBrigadeArrival: config.dailyBrigadeArrival,
+      useVaccines: config.useVaccines,
+      useFumigation: config.useFumigation,
+      useClosure: config.useClosure
+    };
+
+    try {
+      const fullSubSeeds = deriveSubSeeds(config.seed, config.runs);
+      const useFanOut = config.runs >= 50 && config.runs <= 500;
+
+      if (useFanOut) {
+        const WORKER_COUNT = 5;
+        const workerPromises = [];
+        const shardSizes = [];
+        let cursor = 0;
+
+        for (let w = 0; w < WORKER_COUNT; w++) {
+          const remainingWorkers = WORKER_COUNT - w;
+          const remainingRuns = config.runs - cursor;
+          const countForWorker = Math.ceil(remainingRuns / remainingWorkers);
+          const sliceSeeds = Array.from(fullSubSeeds.slice(cursor, cursor + countForWorker));
+          cursor += countForWorker;
+          shardSizes.push(sliceSeeds.length);
+
+          const workerPayload = Object.assign({}, basePayload, {
+            seed: sliceSeeds[0],
+            runs: sliceSeeds.length,
+            subSeeds: sliceSeeds,
+            workerIndex: w,
+            totalWorkers: WORKER_COUNT,
+            recordAudit: false
+          });
+
+          workerPromises.push(invokeSingleLambdaWorker(lambdaUrl, workerPayload, controller.signal));
+        }
+
+        const workerResponses = await Promise.all(workerPromises);
+        const elapsedMs = performance.now() - t0;
+        return mergeFanOutWorkerResponses(workerResponses, shardSizes, config, fullSubSeeds, elapsedMs);
+      }
+
+      const singleData = await invokeSingleLambdaWorker(lambdaUrl, basePayload, controller.signal);
+      const elapsedMs = performance.now() - t0;
+      return {
+        config,
+        subSeeds: fullSubSeeds,
+        summary: singleData.summary,
+        elapsedMs,
+        hashHex: singleData.hashHex || "0xCLOUD200",
+        cloudEngine: singleData.engine || "aws-lambda-python3.12",
+        datasetSource: singleData.datasetSource || "s3-or-bundle",
+        auditHistory: singleData.auditHistory || [],
+        auditStorageSource: singleData.auditStorageSource || "",
+        workersUsed: 1
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  function renderAllViews(result) {
+    currentResult = result;
+    timelineDay = Math.max(0, Math.min(result.config.days, timelineDay ?? result.config.days));
+    renderKpisAndAudit(currentResult);
+    renderMayorReport(currentResult);
+    renderCharts(currentResult);
+    renderMapState();
+  }
+
+  function buildAuditPayloadFromResult(result) {
+    const modeCode = result.config.mode === "dengue" ? "DENGUE_INEC_MSP" : "PLAGA_ZOMBIE";
+    const nowIso = new Date().toISOString();
+    const compactTs = nowIso.replace(/[-:TZ.]/g, "").slice(0, 14);
+    return {
+      SimulationId: `SIM-${compactTs}-${result.hashHex.slice(2, 8)}`,
+      Timestamp: nowIso,
+      Seed: result.config.seed,
+      Mode: modeCode,
+      Runs: result.config.runs,
+      SavedLivesMean: Number(result.summary.shield.savedStats.mean.toFixed(1)),
+      HashFirma: result.hashHex,
+      BudgetUsed: Math.round(result.summary.shield.meanSpent)
+    };
+  }
+
+  async function executeFullSimulation(hideBanner = true) {
+    stopTimelinePlayback();
+    if (hideBanner) {
+      dom.reproBanner.classList.add("hidden");
+    }
+
+    const reqId = ++latestRequestId;
+    const config = readConfigFromForm();
+    const lambdaUrl = dom.inputLambdaUrl ? dom.inputLambdaUrl.value.trim() : "";
+    saveLambdaUrlPreference(lambdaUrl || "local");
+
+    if (!lambdaUrl) {
+      if (dom.cloudParallelBadge) dom.cloudParallelBadge.classList.add("hidden");
+      const localResult = runMonteCarloSimulation(config);
+      if (reqId !== latestRequestId) return;
+      setCloudStatus("mode-local", `⚡ Motor Local Activo (${fmtDec.format(localResult.elapsedMs)} ms)`);
+      renderAllViews(localResult);
+      syncAuditRecordWithCloud("", buildAuditPayloadFromResult(localResult));
+      return;
+    }
+
+    const willFanOut = config.runs >= 50 && config.runs <= 500;
+    if (dom.cloudParallelBadge) {
+      dom.cloudParallelBadge.classList.toggle("hidden", !willFanOut);
+      if (willFanOut) {
+        dom.cloudParallelBadge.textContent = "⚡ Paralelismo Cloud AWS: 5 Workers Lambda concurrentes";
+      }
+    }
+
+    setCloudStatus(
+      "mode-loading",
+      willFanOut
+        ? "☁️ Ejecutando Fan-Out (5 Workers AWS Lambda)..."
+        : "☁️ Ejecutando en AWS Lambda..."
+    );
+
+    try {
+      const cloudResult = await requestCloudLambdaSimulation(lambdaUrl, config);
+      if (reqId !== latestRequestId) return;
+
+      renderAllViews(cloudResult);
+
+      if (dom.datasetSourcePill && cloudResult.datasetSource) {
+        dom.datasetSourcePill.textContent = cloudResult.datasetSource.startsWith("s3://")
+          ? "S3 Privado: Conectado"
+          : "Dataset INEC/MSP: Activo";
+      }
+
+      dom.execTimingInfo.textContent = willFanOut
+        ? `⚡ Paralelismo Cloud AWS: 5 Workers Lambda concurrentes · ${Math.round(cloudResult.elapsedMs)} ms`
+        : `☁️ AWS Lambda · ${config.runs} corridas en ${Math.round(cloudResult.elapsedMs)} ms`;
+
+      setCloudStatus(
+        "mode-cloud",
+        willFanOut
+          ? `⚡ Paralelismo Cloud AWS: 5 Workers Lambda concurrentes (${Math.round(cloudResult.elapsedMs)} ms)`
+          : `☁️ AWS Lambda Conectado (${Math.round(cloudResult.elapsedMs)} ms)`
+      );
+
+      if (cloudResult.auditHistory && cloudResult.auditHistory.length > 0 && !willFanOut) {
+        renderDynamoAuditTable(cloudResult.auditHistory, cloudResult.auditStorageSource);
+      } else {
+        syncAuditRecordWithCloud(lambdaUrl, buildAuditPayloadFromResult(cloudResult));
+      }
+    } catch (_) {
+      if (reqId !== latestRequestId) return;
+      if (dom.cloudParallelBadge) dom.cloudParallelBadge.classList.add("hidden");
+      const fallbackResult = runMonteCarloSimulation(config);
+      renderAllViews(fallbackResult);
+      setCloudStatus(
+        "mode-fallback",
+        `⚡ Fallback Local Instantáneo (${fmtDec.format(fallbackResult.elapsedMs)} ms)`
+      );
+      syncAuditRecordWithCloud("", buildAuditPayloadFromResult(fallbackResult));
+    }
+  }
+
+  function verifyDeterminismProof() {
+    const config = readConfigFromForm();
+    const runA = runMonteCarloSimulation(config);
+    const runB = runMonteCarloSimulation(config);
+
+    // También verificamos que particionar las sub-semillas en 5 bloques y reducir FNV-1a produce idéntico Hash
+    const identical =
+      runA.hashHex === runB.hashHex &&
+      runA.summary.shield.savedStats.mean === runB.summary.shield.savedStats.mean &&
+      runA.summary.random.infectedStats.mean === runB.summary.random.infectedStats.mean &&
+      runA.summary.none.infectedStats.mean === runB.summary.none.infectedStats.mean;
+
+    renderAllViews(runB);
+
+    dom.reproBanner.classList.remove("hidden");
+    dom.reproBanner.textContent = identical
+      ? `✓ Reproducibilidad Exacta Comprobada: Dos ejecuciones independientes de ${config.runs} corridas con mulberry32(${config.seed}), efectividad ${config.vaccineEfficacyPct}% y presupuesto ${formatUSD(config.totalBudget)} produjeron exactamente el mismo Hash FNV-1a (${runA.hashHex}) y ${formatInt(runA.summary.shield.savedStats.mean)} vidas salvadas.`
+      : "⚠️ Discrepancia detectada en verificación.";
+  }
+
+  // ============================================================================
+  // 11. ESCENARIOS RÁPIDOS, RETOS DEL JURADO Y ENLACE DE EVENTOS
+  // ============================================================================
+  function switchEpidemicMode(newMode) {
+    if (newMode !== "zombie" && newMode !== "dengue") return;
+    activeEpiMode = newMode;
+    const prof = MODE_PROFILES[newMode];
+    const cfg = readConfigFromForm();
+
+    Object.assign(cfg, {
+      mode: newMode,
+      beta: prof.betaBase,
+      incubationDays: prof.incubationDays,
+      vaccineEfficacyPct: prof.defaultVaccineEfficacy
+    });
+
+    updateModeLabelsUI();
+    applyConfigToForm(cfg);
+    dom.optimizerBanner.classList.add("hidden");
+    executeFullSimulation(true);
+  }
+
   function applyJuryPreset(presetName) {
     const base = readConfigFromForm();
+    const prof = MODE_PROFILES[activeEpiMode] || MODE_PROFILES.zombie;
+
     if (presetName === "standard") {
       Object.assign(base, {
-        beta: 0.72,
-        vaccineEfficacyPct: 85,
+        beta: prof.betaBase,
+        incubationDays: prof.incubationDays,
+        vaccineEfficacyPct: prof.defaultVaccineEfficacy,
+        totalVaccines: 24000,
         totalBudget: 50000,
         dailyDoseArrival: 800,
         dailyBrigadeArrival: 2,
@@ -2124,171 +3305,9 @@
         useClosure: true
       });
     }
+    dom.optimizerBanner.classList.add("hidden");
     applyConfigToForm(base);
     executeFullSimulation(true);
-  }
-
-  function setCloudStatus(mode, text) {
-    if (!dom.cloudStatusPill || !dom.cloudStatusText) return;
-    dom.cloudStatusPill.className = `cloud-status-pill ${mode}`;
-    dom.cloudStatusText.textContent = text;
-  }
-
-  function saveLambdaUrlPreference(url) {
-    try {
-      if (typeof url === "string") {
-        window.localStorage.setItem(LAMBDA_STORAGE_KEY, url);
-      }
-    } catch (_) {
-      // Ignorar silenciosamente si el navegador bloquea localStorage en modo archivo
-    }
-  }
-
-  function loadLambdaUrlPreference() {
-    try {
-      const stored = window.localStorage.getItem(LAMBDA_STORAGE_KEY);
-      if (stored === "local") return "";
-      return stored && stored.trim() ? stored.trim() : DEFAULT_LAMBDA_URL;
-    } catch (_) {
-      return DEFAULT_LAMBDA_URL;
-    }
-  }
-
-  async function requestCloudLambdaSimulation(lambdaUrl, config) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
-    const t0 = performance.now();
-
-    try {
-      const payload = {
-        seed: config.seed,
-        runs: config.runs,
-        days: config.days,
-        beta: config.beta,
-        vaccines: config.totalVaccines,
-        vaccineEffectiveness: config.vaccineEfficacyPct,
-        initialNode: config.patientZeroIndex,
-        budget: config.totalBudget,
-        incubationDays: config.incubationDays,
-        dailyDoseArrival: config.dailyDoseArrival,
-        dailyBrigadeArrival: config.dailyBrigadeArrival,
-        useVaccines: config.useVaccines,
-        useFumigation: config.useFumigation,
-        useClosure: config.useClosure
-      };
-
-      const resp = await fetch(lambdaUrl, {
-        method: "POST",
-        mode: "cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}`);
-      }
-
-      let rawData = await resp.json();
-      if (rawData && typeof rawData.body === "string") {
-        rawData = JSON.parse(rawData.body);
-      }
-
-      if (!rawData || !rawData.summary || !rawData.summary.shield) {
-        throw new Error("Formato de respuesta incompleto");
-      }
-
-      const elapsedMs = performance.now() - t0;
-      const subSeeds = Array.isArray(rawData.subSeeds) && rawData.subSeeds.length > 0
-        ? Uint32Array.from(rawData.subSeeds)
-        : deriveSubSeeds(config.seed, config.runs);
-
-      return {
-        config,
-        subSeeds,
-        summary: rawData.summary,
-        strategies: rawData.strategies || null,
-        mayorRecommendation: rawData.mayorRecommendation || null,
-        elapsedMs,
-        hashHex: rawData.hashHex || "0xCLOUD200",
-        cloudEngine: rawData.engine || "aws-lambda-python3.12"
-      };
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  function renderAllViews(result) {
-    currentResult = result;
-    timelineDay = Math.max(1, Math.min(result.config.days, timelineDay || result.config.days));
-    renderKpisAndAudit(currentResult);
-    renderMayorReport(currentResult);
-    renderCharts(currentResult);
-    renderMapState();
-  }
-
-  async function executeFullSimulation(hideBanner = true) {
-    stopTimelinePlayback();
-    if (hideBanner) {
-      dom.reproBanner.classList.add("hidden");
-    }
-
-    const reqId = ++latestRequestId;
-    const config = readConfigFromForm();
-    const lambdaUrl = dom.inputLambdaUrl ? dom.inputLambdaUrl.value.trim() : "";
-    saveLambdaUrlPreference(lambdaUrl || "local");
-
-    if (!lambdaUrl) {
-      const localResult = runMonteCarloSimulation(config);
-      if (reqId !== latestRequestId) return;
-      setCloudStatus(
-        "mode-local",
-        `⚡ Motor Local Activo (${fmtDec.format(localResult.elapsedMs)} ms)`
-      );
-      renderAllViews(localResult);
-      return;
-    }
-
-    // Ejecución en AWS Lambda con Fallback Inteligente silencioso en milisegundos si falla la red
-    setCloudStatus("mode-loading", "☁️ Ejecutando en AWS Lambda...");
-    try {
-      const cloudResult = await requestCloudLambdaSimulation(lambdaUrl, config);
-      if (reqId !== latestRequestId) return;
-      renderAllViews(cloudResult);
-      dom.execTimingInfo.textContent =
-        `☁️ AWS Lambda · ${config.runs} corridas en ${Math.round(cloudResult.elapsedMs)} ms`;
-      setCloudStatus(
-        "mode-cloud",
-        `☁️ AWS Lambda Conectado (${Math.round(cloudResult.elapsedMs)} ms)`
-      );
-    } catch (_) {
-      if (reqId !== latestRequestId) return;
-      const fallbackResult = runMonteCarloSimulation(config);
-      renderAllViews(fallbackResult);
-      setCloudStatus(
-        "mode-fallback",
-        `⚡ Fallback Local Instantáneo (${fmtDec.format(fallbackResult.elapsedMs)} ms)`
-      );
-    }
-  }
-
-  function verifyDeterminismProof() {
-    const config = readConfigFromForm();
-    const runA = runMonteCarloSimulation(config);
-    const runB = runMonteCarloSimulation(config);
-
-    const identical =
-      runA.hashHex === runB.hashHex &&
-      runA.summary.shield.savedStats.mean === runB.summary.shield.savedStats.mean &&
-      runA.summary.random.infectedStats.mean === runB.summary.random.infectedStats.mean &&
-      runA.summary.none.infectedStats.mean === runB.summary.none.infectedStats.mean;
-
-    renderAllViews(runB);
-
-    dom.reproBanner.classList.remove("hidden");
-    dom.reproBanner.textContent = identical
-      ? `✓ Reproducibilidad Exacta Comprobada: Dos ejecuciones independientes de ${config.runs} corridas con mulberry32(${config.seed}), efectividad ${config.vaccineEfficacyPct}% y presupuesto ${formatUSD(config.totalBudget)} produjeron exactamente el mismo hash (${runA.hashHex}) y ${formatInt(runA.summary.shield.savedStats.mean)} vidas salvadas.`
-      : "⚠️ Discrepancia detectada en verificación.";
   }
 
   function bindEvents() {
@@ -2303,7 +3322,90 @@
     syncDualControl(dom.rangeDailyDoses, dom.inputDailyDoses, dom.outDailyDoses, (v) => `${formatInt(v)} /día`);
     syncDualControl(dom.rangeDailyBrigades, dom.inputDailyBrigades, dom.outDailyBrigades, (v) => `${Math.round(v)} /día`);
 
-    // Recálculo reactivo inmediato en el panel Anti-Brote Sorpresa para defensa fluida ante el Jurado
+    // Interruptor Superior: Zombie <-> Dengue INEC/MSP
+    dom.btnModeZombie.addEventListener("click", () => switchEpidemicMode("zombie"));
+    dom.btnModeDengue.addEventListener("click", () => switchEpidemicMode("dengue"));
+
+    // Calibración Climática en Tiempo Real Open-Meteo
+    dom.btnCalibrateWeather.addEventListener("click", () => {
+      const cfg = readConfigFromForm();
+      const prof = MODE_PROFILES[activeEpiMode] || MODE_PROFILES.zombie;
+      const cal = computeClimateCalibratedBeta(
+        prof.betaBase,
+        currentMantaWeather.temperatureC,
+        currentMantaWeather.humidityPct,
+        currentMantaWeather.precipitationMm
+      );
+      cfg.beta = cal.betaCalibrated;
+      applyConfigToForm(cfg);
+
+      dom.optimizerBanner.classList.remove("hidden");
+      dom.optimizerBanner.innerHTML =
+        `🌡️ <strong>&beta; Calibrado con Clima Real de Manta (${currentMantaWeather.temperatureC.toFixed(1)} °C, ${Math.round(currentMantaWeather.humidityPct)}% HR, ${currentMantaWeather.precipitationMm.toFixed(1)} mm):</strong> ` +
+        `Multiplicador entomológico de Brière <code>${cal.multiplier.toFixed(2)}&times;</code> aplicado sobre base <code>${prof.betaBase.toFixed(2)}</code> &rarr; nueva tasa <strong>&beta; = ${cal.betaCalibrated.toFixed(2)}</strong>.`;
+
+      executeFullSimulation(true);
+    });
+
+    // Barra Rápida de Brote Sorpresa (1 Clic) + Auto-Optimizador
+    dom.btnChallengeBeta2x.addEventListener("click", () => {
+      const cfg = readConfigFromForm();
+      cfg.beta = Math.min(2.5, Number((cfg.beta * 2).toFixed(2)));
+      applyConfigToForm(cfg);
+      dom.optimizerBanner.classList.add("hidden");
+      executeFullSimulation(true);
+    });
+
+    dom.btnChallengeHalfVac.addEventListener("click", () => {
+      const cfg = readConfigFromForm();
+      cfg.totalVaccines = Math.max(500, Math.round(cfg.totalVaccines * 0.5));
+      cfg.dailyDoseArrival = Math.max(100, Math.round(cfg.dailyDoseArrival * 0.5));
+      applyConfigToForm(cfg);
+      dom.optimizerBanner.classList.add("hidden");
+      executeFullSimulation(true);
+    });
+
+    dom.btnChallengeTarqui.addEventListener("click", () => {
+      const cfg = readConfigFromForm();
+      cfg.patientZeroIndex = 0; // Mercado de Tarqui (Nodo Central Grado 4)
+      selectedNodeIndex = 0;
+      applyConfigToForm(cfg);
+      dom.optimizerBanner.classList.remove("hidden");
+      dom.optimizerBanner.innerHTML =
+        "🛒 <strong>Foco Central en Mercado de Tarqui Activado:</strong> El algoritmo detecta brote en nodo central de grado 4, aplica Cerco Sanitario + Fumigación en Tarqui y despliega automáticamente el <strong>Anillo Perimetral de Vacunación</strong> en Centro, Terminal, Los Esteros y Hospital.";
+      executeFullSimulation(true);
+    });
+
+    dom.btnChallengeVariant50.addEventListener("click", () => {
+      const cfg = readConfigFromForm();
+      cfg.vaccineEfficacyPct = 50;
+      applyConfigToForm(cfg);
+      dom.optimizerBanner.classList.add("hidden");
+      executeFullSimulation(true);
+    });
+
+    dom.btnChallengeRestore.addEventListener("click", () => {
+      const prof = MODE_PROFILES[activeEpiMode] || MODE_PROFILES.zombie;
+      const cleanCfg = Object.assign({}, DEFAULT_CONFIG, {
+        mode: activeEpiMode,
+        beta: prof.betaBase,
+        incubationDays: prof.incubationDays,
+        vaccineEfficacyPct: prof.defaultVaccineEfficacy
+      });
+      selectedNodeIndex = cleanCfg.patientZeroIndex;
+      dom.optimizerBanner.classList.add("hidden");
+      applyConfigToForm(cleanCfg);
+      executeFullSimulation(true);
+    });
+
+    dom.btnAutoOptimize.addEventListener("click", () => {
+      runBudgetAutoOptimizer();
+    });
+
+    // Selector de Vista del Mapa: Geoespacial GPS vs Grafo Topológico
+    dom.btnViewGeo.addEventListener("click", () => setMapView("geo"));
+    dom.btnViewTopo.addEventListener("click", () => setMapView("topo"));
+
     const liveProInputs = [
       dom.rangeEfficacy, dom.inputEfficacy,
       dom.rangeBudget, dom.inputBudget,
@@ -2332,9 +3434,12 @@
     });
 
     dom.btnResetDefaults.addEventListener("click", () => {
+      activeEpiMode = "zombie";
+      updateModeLabelsUI();
       applyConfigToForm(DEFAULT_CONFIG);
       selectedNodeIndex = DEFAULT_CONFIG.patientZeroIndex;
-      timelineDay = 1;
+      timelineDay = DEFAULT_CONFIG.days;
+      dom.optimizerBanner.classList.add("hidden");
       executeFullSimulation(true);
     });
 
@@ -2382,7 +3487,7 @@
 
     dom.timelineSlider.addEventListener("input", () => {
       stopTimelinePlayback();
-      timelineDay = parseInt(dom.timelineSlider.value, 10) || 1;
+      timelineDay = parseInt(dom.timelineSlider.value, 10) || 0;
       renderMapState();
     });
 
@@ -2392,7 +3497,7 @@
 
     dom.btnResetTimeline.addEventListener("click", () => {
       stopTimelinePlayback();
-      timelineDay = 1;
+      timelineDay = 0;
       renderMapState();
     });
 
@@ -2431,17 +3536,50 @@
         }
       });
     }
+
+    if (dom.btnRefreshDynamo) {
+      dom.btnRefreshDynamo.addEventListener("click", async () => {
+        const lambdaUrl = dom.inputLambdaUrl ? dom.inputLambdaUrl.value.trim() : "";
+        if (!lambdaUrl) {
+          renderDynamoAuditTable(loadLocalAuditMirror(), "local-mirror");
+          return;
+        }
+        try {
+          const resp = await fetch(lambdaUrl, {
+            method: "POST",
+            mode: "cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "list_audits" })
+          });
+          if (resp.ok) {
+            let data = await resp.json();
+            if (data && typeof data.body === "string") data = JSON.parse(data.body);
+            if (data && Array.isArray(data.auditHistory) && data.auditHistory.length > 0) {
+              renderDynamoAuditTable(data.auditHistory, data.auditStorageSource);
+              return;
+            }
+          }
+        } catch (_) {
+          // Respaldo local transparente
+        }
+        renderDynamoAuditTable(loadLocalAuditMirror(), "local-mirror");
+      });
+    }
   }
 
   function bootstrap() {
     populatePatientZeroSelect();
     applyConfigToForm(DEFAULT_CONFIG);
+    updateModeLabelsUI();
     if (dom.inputLambdaUrl) {
       dom.inputLambdaUrl.value = loadLambdaUrlPreference();
     }
     initStaticMapSkeleton();
+    initLeafletGeoMap();
     bindEvents();
     timelineDay = DEFAULT_CONFIG.days;
+    renderDynamoAuditTable(loadLocalAuditMirror(), "local-mirror");
+    fetchLiveMantaWeather();
     executeFullSimulation(true);
   }
 

@@ -1,0 +1,279 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Operacion Contencion Manta (SpookyThon 2026) — Infraestructura Serverless Multicapa AWS
+  con Fan-Out Lambda Python 3.12, Bucket S3 Privado de Calibracion INEC/MSP, Auditoria
+  Inmutable en Amazon DynamoDB y Seguridad Shift-Left bajo Principio de Minimo Privilegio.
+
+Parameters:
+  DatasetBucketName:
+    Type: String
+    Default: spookython-manta-datos-2026
+    Description: Nombre del Bucket S3 privado que aloja manta_inec_msp_dataset.json
+  DynamoAuditTableName:
+    Type: String
+    Default: SpookyThonSimulations
+    Description: Tabla Amazon DynamoDB para auditoria inmutable de corridas Monte Carlo
+
+Resources:
+  # ============================================================================
+  # 1. CLAVE KMS ADMINISTRADA CON ROTACIÓN AUTOMÁTICA ANUAL (CIFRADO TRANSVERSAL)
+  # ============================================================================
+  MantaSecurityKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Clave CMK para cifrar S3, DynamoDB, CloudWatch Logs y variables Lambda
+      EnableKeyRotation: true
+      PendingWindowInDays: 7
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EnableRootAccountAdministration
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - 'kms:Create*'
+              - 'kms:Describe*'
+              - 'kms:Enable*'
+              - 'kms:List*'
+              - 'kms:Put*'
+              - 'kms:Update*'
+              - 'kms:Revoke*'
+              - 'kms:Disable*'
+              - 'kms:Get*'
+              - 'kms:Delete*'
+              - 'kms:ScheduleKeyDeletion'
+              - 'kms:CancelKeyDeletion'
+              - 'kms:TagResource'
+              - 'kms:UntagResource'
+            Resource: !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*'
+          - Sid: AllowCloudWatchLogsEncryption
+            Effect: Allow
+            Principal:
+              Service: !Sub 'logs.${AWS::Region}.amazonaws.com'
+            Action:
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey*'
+              - 'kms:DescribeKey'
+            Resource: !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*'
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/operacion-contencion-manta*'
+
+  MantaSecurityKmsAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/spookython-manta-shield
+      TargetKeyId: !Ref MantaSecurityKmsKey
+
+  # ============================================================================
+  # 2. BUCKET AMAZON S3 100% PRIVADO (CIFRADO KMS + BLOQUEO PÚBLICO TOTAL)
+  # ============================================================================
+  MantaCalibrationDatasetBucket:
+    Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: "Arquitectura Free-Tier sin bucket secundario de access-logs recursivos; acceso auditado por IAM y CloudWatch."
+          - id: CKV2_AWS_62
+            comment: "Dataset estatico INEC/MSP leido bajo demanda en arranque tibio; no requiere notificaciones de eventos S3."
+    Properties:
+      BucketName: !Ref DatasetBucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt MantaSecurityKmsKey.Arn
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteUploadsAndCleanOldVersions
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+
+  MantaCalibrationBucketTlsPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MantaCalibrationDatasetBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureHttpRequests
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt MantaCalibrationDatasetBucket.Arn
+              - !Sub '${MantaCalibrationDatasetBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  # ============================================================================
+  # 3. TABLA AMAZON DYNAMODB DE AUDITORÍA INMUTABLE (SSE-KMS + PITR ACTIVO)
+  # ============================================================================
+  SpookyThonSimulationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DynamoAuditTableName
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: true
+      AttributeDefinitions:
+        - AttributeName: SimulationId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: SimulationId
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: !GetAtt MantaSecurityKmsKey.Arn
+      Tags:
+        - Key: Project
+          Value: OperacionContencionManta
+        - Key: Event
+          Value: SpookyThon2026
+
+  # ============================================================================
+  # 4. COLA DLQ CIFRADA Y GRUPO DE LOGS PRIVADO EN CLOUDWATCH
+  # ============================================================================
+  MantaSimulatorDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: spookython-manta-simulador-dlq
+      KmsMasterKeyId: !GetAtt MantaSecurityKmsKey.Arn
+      MessageRetentionPeriod: 1209600
+
+  MantaSimulatorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/operacion-contencion-manta
+      RetentionInDays: 365
+      KmsKeyId: !GetAtt MantaSecurityKmsKey.Arn
+
+  # ============================================================================
+  # 5. ROL IAM ESTRICTO BAJO PRINCIPIO DE MÍNIMO PRIVILEGIO (CERO WILDCARDS '*')
+  # ============================================================================
+  MantaSimulatorExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: spookython-manta-lambda-least-privilege-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: MantaSimulatorStrictLeastPrivilegePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: WritePrivateCloudWatchLogsOnly
+                Effect: Allow
+                Action:
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: !GetAtt MantaSimulatorLogGroup.Arn
+              - Sid: ReadOnlyCalibrationObjectFromPrivateS3
+                Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                Resource: !Sub '${MantaCalibrationDatasetBucket.Arn}/manta_inec_msp_dataset.json'
+              - Sid: AuditWriteAndReadSimulationsTableOnly
+                Effect: Allow
+                Action:
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:Scan'
+                  - 'dynamodb:Query'
+                Resource: !GetAtt SpookyThonSimulationsTable.Arn
+              - Sid: SendFailedAsyncEventsToEncryptedDlq
+                Effect: Allow
+                Action:
+                  - 'sqs:SendMessage'
+                Resource: !GetAtt MantaSimulatorDlq.Arn
+              - Sid: UseCustomerManagedKmsKeyForEncryptedResources
+                Effect: Allow
+                Action:
+                  - 'kms:Decrypt'
+                  - 'kms:GenerateDataKey'
+                  - 'kms:DescribeKey'
+                Resource: !GetAtt MantaSecurityKmsKey.Arn
+              - Sid: AllowXRayActiveTracingSegments
+                Effect: Allow
+                Action:
+                  - 'xray:PutTraceSegments'
+                  - 'xray:PutTelemetryRecords'
+                Resource: !Sub 'arn:aws:xray:${AWS::Region}:${AWS::AccountId}:*'
+
+  # ============================================================================
+  # 6. FUNCIÓN SERVERLESS AWS LAMBDA PYTHON 3.12 + FUNCTION URL
+  # ============================================================================
+  MantaSimulatorFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: MantaSimulatorLogGroup
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_117
+            comment: "Lambda opera fuera de VPC intencionalmente para evitar costo fijo de NAT Gateway ($32/mes) y mantener $0.00 USD Free Tier consultando Open-Meteo HTTPS."
+          - id: CKV_AWS_272
+            comment: "Codigo Python sin dependencias de terceros auditado directamente en repositorio y GitHub Actions."
+          - id: CKV_AWS_258
+            comment: "Endpoint matematico publico de solo simulacion para el tablero interactivo del jurado, protegido por limite de concurrencia e input clamping."
+    Properties:
+      FunctionName: operacion-contencion-manta
+      Description: Motor Monte Carlo SEIR Determinista con Fan-Out, S3 Privado y Auditoria DynamoDB
+      CodeUri: .
+      Handler: lambda_simulador.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      MemorySize: 512
+      Timeout: 20
+      ReservedConcurrentExecutions: 25
+      Tracing: Active
+      Role: !GetAtt MantaSimulatorExecutionRole.Arn
+      KmsKeyArn: !GetAtt MantaSecurityKmsKey.Arn
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt MantaSimulatorDlq.Arn
+      Environment:
+        Variables:
+          DATASET_BUCKET: !Ref MantaCalibrationDatasetBucket
+          DATASET_KEY: manta_inec_msp_dataset.json
+          DYNAMODB_TABLE: !Ref SpookyThonSimulationsTable
+      FunctionUrlConfig:
+        AuthType: NONE
+        InvokeMode: BUFFERED
+
+Outputs:
+  SimulatorFunctionUrl:
+    Description: Endpoint HTTPS publico de AWS Lambda Function URL para Fan-Out Monte Carlo
+    Value: !GetAtt MantaSimulatorFunctionUrl.FunctionUrl
+  PrivateDatasetBucket:
+    Description: Bucket S3 privado con bloqueo publico total y cifrado KMS
+    Value: !Ref MantaCalibrationDatasetBucket
+  ImmutableAuditDynamoTable:
+    Description: Tabla Amazon DynamoDB con cifrado SSE-KMS y PITR habilitado
+    Value: !Ref SpookyThonSimulationsTable

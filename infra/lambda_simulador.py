@@ -1,93 +1,176 @@
 """
-OPERACIÓN CONTENCIÓN MANTA · AWS LAMBDA BACKEND (PYTHON 3.12)
-Track B - La Plaga Zombie
+OPERACIÓN CONTENCIÓN MANTA · AWS LAMBDA MULTICAPA (PYTHON 3.12)
+SpookyThon 2026 — Track B (La Plaga Zombie) & Modo Científico Real (Dengue INEC/MSP)
 
-Función serverless sin dependencias externas (solo librerías estándar: json, math, random).
-Soporta peticiones OPTIONS y POST con CORS abierto (*), ejecuta simulaciones Monte Carlo
-reproducibles por semilla sobre el grafo real de 8 barrios de Manta para las 3 estrategias
-(Sin Intervención, Al Azar, Escudo de Centralidad y Riesgo), respeta estrictamente la regla
-de vacunar únicamente a población Sana, y genera la recomendación ejecutiva para el Alcalde.
+Capacidades de Arquitectura Serverless:
+1. Soporta OPTIONS, GET y POST con cabeceras CORS abiertas (*).
+2. Ejecución Fan-Out Paralela: procesa rangos deterministas de sub-semillas (subSeeds)
+   devolviendo acumuladores exactos (shardRaw) para que N workers paralelos produzcan
+   exactamente el mismo resultado y Hash FNV-1a de 32 bits que una corrida secuencial.
+3. Estrategia mejorada "Escudo de Centralidad + Cerco Perimetral Adaptativo" respetando
+   la Regla Estricta (0 vacunas a Expuestos, Infectados o Recuperados; 100% solo Sanos).
+4. Integración AWS Multicapa resiliente con boto3 (bloques try/except seguros):
+   - Lectura de calibración desde Bucket S3 privado (DATASET_BUCKET = spookython-manta-datos-2026)
+     con respaldo inmediato al dataset local INEC/MSP.
+   - Registro y consulta de auditoría inmutable en Amazon DynamoDB (SpookyThonSimulations).
+   - Telemetría meteorológica en vivo desde Open-Meteo para Manta (-0.9677, -80.7089).
 """
 
+from datetime import datetime, timezone
+from decimal import Decimal
 import json
 import math
+import os
 import random
+import urllib.request
+import uuid
+
+try:
+    import boto3
+    from botocore.config import Config as BotoConfig
+
+    BOTO3_AVAILABLE = True
+except Exception:
+    boto3 = None
+    BotoConfig = None
+    BOTO3_AVAILABLE = False
 
 # ==============================================================================
-# 1. GRAFO REAL DE MANTA (8 NODOS, 100,000 HABITANTES, 13 ARISTAS DE CONTACTO)
+# 1. CONFIGURACIÓN AWS Y DATASET DE RESPALDO INEC / MSP DE MANTA
 # ==============================================================================
-MANTA_NODES = [
-    {
-        "id": "mercado",
-        "index": 0,
-        "name": "Mercado de Tarqui",
-        "population": 15000,
-        "neighbors": [2, 6, 1, 5],  # Centro, Los Esteros, Terminal, Hospital
-    },
-    {
-        "id": "terminal",
-        "index": 1,
-        "name": "Terminal Terrestre",
-        "population": 12000,
-        "neighbors": [0, 3, 6, 2],  # Mercado, ULEAM, Los Esteros, Centro
-    },
-    {
-        "id": "centro",
-        "index": 2,
-        "name": "Centro de Manta",
-        "population": 18000,
-        "neighbors": [0, 1, 4, 5],  # Mercado, Terminal, Playa Murciélago, Hospital
-    },
-    {
-        "id": "uleam",
-        "index": 3,
-        "name": "ULEAM",
-        "population": 14000,
-        "neighbors": [1, 4, 7],     # Terminal, Playa Murciélago, San Mateo
-    },
-    {
-        "id": "murcielago",
-        "index": 4,
-        "name": "Playa El Murciélago",
-        "population": 10000,
-        "neighbors": [2, 3, 7],     # Centro, ULEAM, San Mateo
-    },
-    {
-        "id": "hospital",
-        "index": 5,
-        "name": "Hospital Rodríguez Zambrano",
-        "population": 8000,
-        "neighbors": [2, 0, 7],     # Centro, Mercado, San Mateo
-    },
-    {
-        "id": "esteros",
-        "index": 6,
-        "name": "Los Esteros",
-        "population": 16000,
-        "neighbors": [0, 1],        # Mercado, Terminal
-    },
-    {
-        "id": "san_mateo",
-        "index": 7,
-        "name": "San Mateo",
-        "population": 7000,
-        "neighbors": [3, 4, 5],     # ULEAM, Playa Murciélago, Hospital
-    },
-]
+DATASET_BUCKET = os.environ.get("DATASET_BUCKET", "spookython-manta-datos-2026")
+DATASET_KEY = os.environ.get("DATASET_KEY", "manta_inec_msp_dataset.json")
+DYNAMODB_TABLE = os.environ.get("DYNAMODB_TABLE", "SpookyThonSimulations")
+OPEN_METEO_MANTA_URL = (
+    "https://api.open-meteo.com/v1/forecast"
+    "?latitude=-0.9677&longitude=-80.7089"
+    "&current=temperature_2m,relative_humidity_2m,precipitation"
+)
 
+LOCAL_FALLBACK_DATASET = {
+    "datasetId": "INEC-MSP-MANTA-2026-V2",
+    "modes": {
+        "zombie": {
+            "code": "PLAGA_ZOMBIE",
+            "betaBase": 0.72,
+            "incubationDays": 3,
+            "recoveryGamma": 0.20,
+            "corridorCoupling": 0.025,
+            "initialCases": 10,
+        },
+        "dengue": {
+            "code": "DENGUE_INEC_MSP",
+            "betaBase": 0.58,
+            "incubationDays": 5,
+            "recoveryGamma": 0.1667,
+            "corridorCoupling": 0.028,
+            "initialCases": 14,
+        },
+    },
+    "nodes": [
+        {
+            "id": "mercado",
+            "index": 0,
+            "name": "Mercado de Tarqui",
+            "lat": -0.9538,
+            "lng": -80.7082,
+            "population": 15000,
+            "aedesBreteauIndex": 18.4,
+            "neighbors": [2, 6, 1, 5],
+        },
+        {
+            "id": "terminal",
+            "index": 1,
+            "name": "Terminal Terrestre",
+            "lat": -0.9615,
+            "lng": -80.6928,
+            "population": 12000,
+            "aedesBreteauIndex": 15.2,
+            "neighbors": [0, 3, 6, 2],
+        },
+        {
+            "id": "centro",
+            "index": 2,
+            "name": "Centro de Manta",
+            "lat": -0.9496,
+            "lng": -80.7214,
+            "population": 18000,
+            "aedesBreteauIndex": 13.8,
+            "neighbors": [0, 1, 4, 5],
+        },
+        {
+            "id": "uleam",
+            "index": 3,
+            "name": "ULEAM",
+            "lat": -0.9529,
+            "lng": -80.7456,
+            "population": 14000,
+            "aedesBreteauIndex": 11.6,
+            "neighbors": [1, 4, 7],
+        },
+        {
+            "id": "murcielago",
+            "index": 4,
+            "name": "Playa El Murciélago",
+            "lat": -0.9418,
+            "lng": -80.7319,
+            "population": 10000,
+            "aedesBreteauIndex": 10.4,
+            "neighbors": [2, 3, 7],
+        },
+        {
+            "id": "hospital",
+            "index": 5,
+            "name": "Hospital Rodríguez Zambrano",
+            "lat": -0.9602,
+            "lng": -80.7385,
+            "population": 8000,
+            "aedesBreteauIndex": 9.8,
+            "neighbors": [2, 0, 7],
+        },
+        {
+            "id": "esteros",
+            "index": 6,
+            "name": "Los Esteros",
+            "lat": -0.9482,
+            "lng": -80.7011,
+            "population": 16000,
+            "aedesBreteauIndex": 21.5,
+            "neighbors": [0, 1],
+        },
+        {
+            "id": "san_mateo",
+            "index": 7,
+            "name": "San Mateo",
+            "lat": -0.9885,
+            "lng": -80.8092,
+            "population": 7000,
+            "aedesBreteauIndex": 14.1,
+            "neighbors": [3, 4, 5],
+        },
+    ],
+    "mobilityMatrix": [
+        [0.000, 0.032, 0.036, 0.000, 0.000, 0.022, 0.034, 0.000],
+        [0.032, 0.000, 0.030, 0.026, 0.000, 0.000, 0.028, 0.000],
+        [0.036, 0.030, 0.000, 0.000, 0.028, 0.026, 0.000, 0.000],
+        [0.000, 0.026, 0.000, 0.000, 0.025, 0.000, 0.000, 0.019],
+        [0.000, 0.000, 0.028, 0.025, 0.000, 0.000, 0.000, 0.018],
+        [0.022, 0.000, 0.026, 0.000, 0.000, 0.000, 0.000, 0.016],
+        [0.034, 0.028, 0.000, 0.000, 0.000, 0.000, 0.000, 0.000],
+        [0.000, 0.000, 0.000, 0.019, 0.018, 0.016, 0.000, 0.000],
+    ],
+}
+
+MANTA_NODES = LOCAL_FALLBACK_DATASET["nodes"]
 TOTAL_CITY_POPULATION = sum(n["population"] for n in MANTA_NODES)  # 100,000
 
-# Costos y parámetros de Intervenciones Combinadas
-COST_VACCINE_DOSE = 15          # $15 por dosis
-COST_FUMIGATION = 1200          # $1,200 por barrio (reduce contagio local 40% por 5 días)
+# Costos oficiales de Intervenciones Combinadas
+COST_VACCINE_DOSE = 15          # $15 por dosis (solo población Sana)
+COST_FUMIGATION = 1200          # $1,200 por barrio (-40% contagio local por 5 días)
 FUMIGATION_DURATION_DAYS = 5
 FUMIGATION_LOCAL_MULT = 0.60
-COST_NODE_CLOSURE = 3500        # $3,500 por barrio (reduce flujo vecino 75%)
+COST_NODE_CLOSURE = 3500        # $3,500 por barrio (-75% flujo inter-barrial)
 CLOSURE_FLOW_MULT = 0.25
-
-INITIAL_ZOMBIES = 10
-EXORCISM_RATE_GAMMA = 0.20
-CORRIDOR_COUPLING = 0.025
 TACTICAL_BRIGADE_SIZE = 100
 
 CORS_HEADERS = {
@@ -98,16 +181,213 @@ CORS_HEADERS = {
     "Access-Control-Max-Age": "86400",
 }
 
+# Caché en contenedor tibio (Warm Container) para evitar latencia repetitiva
+_CACHED_DATASET = None
+_CACHED_DATASET_SOURCE = None
+_S3_ATTEMPTED = False
+_DYNAMO_DISABLED_IN_CONTAINER = False
+_MEMORY_AUDIT_RING = []
+
 
 # ==============================================================================
-# 2. PRNG DETERMINISTA DE ALTA VELOCIDAD (C-NATIVE random.Random + mulberry32)
+# 2. INTEGRACIONES AWS S3 PRIVADO, DYNAMODB Y CLIMA REAL OPEN-METEO
 # ==============================================================================
+def _fast_boto_config():
+    if BotoConfig is None:
+        return None
+    return BotoConfig(
+        connect_timeout=1.1,
+        read_timeout=1.2,
+        retries={"max_attempts": 1, "mode": "standard"},
+    )
+
+
+def load_calibration_dataset():
+    """
+    Intenta leer el archivo de calibración desde un Bucket S3 privado
+    (DATASET_BUCKET = spookython-manta-datos-2026) con fallback inmediato
+    al archivo empaquetado o al diccionario oficial INEC/MSP en memoria.
+    """
+    global _CACHED_DATASET, _CACHED_DATASET_SOURCE, _S3_ATTEMPTED
+    if _CACHED_DATASET is not None:
+        return _CACHED_DATASET, _CACHED_DATASET_SOURCE
+
+    if BOTO3_AVAILABLE and not _S3_ATTEMPTED and os.environ.get("SKIP_AWS_IO") != "1":
+        _S3_ATTEMPTED = True
+        try:
+            s3 = boto3.client("s3", config=_fast_boto_config())
+            obj = s3.get_object(Bucket=DATASET_BUCKET, Key=DATASET_KEY)
+            raw_bytes = obj["Body"].read()
+            parsed = json.loads(raw_bytes.decode("utf-8"))
+            if isinstance(parsed, dict) and "nodes" in parsed:
+                _CACHED_DATASET = parsed
+                _CACHED_DATASET_SOURCE = f"s3://{DATASET_BUCKET}/{DATASET_KEY}"
+                return _CACHED_DATASET, _CACHED_DATASET_SOURCE
+        except Exception:
+            pass
+
+    # Intento secundario: archivo JSON local junto a la función Lambda
+    try:
+        local_path = os.path.join(os.path.dirname(__file__), "manta_inec_msp_dataset.json")
+        if os.path.exists(local_path):
+            with open(local_path, "r", encoding="utf-8") as fh:
+                parsed = json.load(fh)
+                if isinstance(parsed, dict) and "nodes" in parsed:
+                    _CACHED_DATASET = parsed
+                    _CACHED_DATASET_SOURCE = "local-bundle:manta_inec_msp_dataset.json"
+                    return _CACHED_DATASET, _CACHED_DATASET_SOURCE
+    except Exception:
+        pass
+
+    _CACHED_DATASET = LOCAL_FALLBACK_DATASET
+    _CACHED_DATASET_SOURCE = "embedded-fallback:INEC-MSP-MANTA-2026"
+    return _CACHED_DATASET, _CACHED_DATASET_SOURCE
+
+
+def compute_climate_calibrated_beta(base_beta, temp_c, humidity_pct, precip_mm):
+    """
+    Modelo térmico-entomológico de Brière / Mordecai adaptado a la costa de Manta:
+    Óptimo vectorial ~28.5°C, supervivencia favorecida con humedad > 65% y criaderos por lluvia.
+    """
+    t_eff = max(14.5, min(38.0, float(temp_c)))
+    rh_eff = max(20.0, min(100.0, float(humidity_pct)))
+    p_eff = max(0.0, min(50.0, float(precip_mm)))
+
+    def briere_term(t):
+        return t * (t - 13.5) * math.sqrt(max(0.01, 39.0 - t))
+
+    phi_temp = briere_term(t_eff) / briere_term(26.5)
+    phi_rh = max(0.75, min(1.25, 1.0 + 0.0045 * (rh_eff - 76.0)))
+    phi_rain = 1.0 + min(0.28, 0.035 * p_eff)
+
+    calibrated = base_beta * phi_temp * phi_rh * phi_rain
+    return round(max(0.15, min(2.20, calibrated)), 2), {
+        "phiTemp": round(phi_temp, 3),
+        "phiHumidity": round(phi_rh, 3),
+        "phiRain": round(phi_rain, 3),
+        "combinedMultiplier": round(phi_temp * phi_rh * phi_rain, 3),
+    }
+
+
+def fetch_manta_live_weather():
+    """Consulta Open-Meteo en tiempo real para Manta con respaldo climatológico seguro."""
+    try:
+        req = urllib.request.Request(
+            OPEN_METEO_MANTA_URL,
+            headers={"User-Agent": "OperacionContencionManta-SpookyThon/2.0"},
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=2.2) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            curr = data.get("current", {})
+            temp_c = float(curr.get("temperature_2m", 26.8))
+            humidity = float(curr.get("relative_humidity_2m", 78.0))
+            precip = float(curr.get("precipitation", 0.0))
+            beta_zombie, factors = compute_climate_calibrated_beta(0.72, temp_c, humidity, precip)
+            beta_dengue, _ = compute_climate_calibrated_beta(0.58, temp_c, humidity, precip)
+            return {
+                "live": True,
+                "source": "open-meteo-live",
+                "latitude": -0.9677,
+                "longitude": -80.7089,
+                "temperatureC": round(temp_c, 1),
+                "humidityPct": round(humidity, 0),
+                "precipitationMm": round(precip, 2),
+                "observedAt": curr.get("time") or datetime.now(timezone.utc).isoformat(),
+                "calibratedBetaZombie": beta_zombie,
+                "calibratedBetaDengue": beta_dengue,
+                "factors": factors,
+            }
+    except Exception:
+        beta_zombie, factors = compute_climate_calibrated_beta(0.72, 26.8, 78.0, 0.0)
+        beta_dengue, _ = compute_climate_calibrated_beta(0.58, 26.8, 78.0, 0.0)
+        return {
+            "live": False,
+            "source": "climatologia-costera-manta-fallback",
+            "latitude": -0.9677,
+            "longitude": -80.7089,
+            "temperatureC": 26.8,
+            "humidityPct": 78.0,
+            "precipitationMm": 0.0,
+            "observedAt": datetime.now(timezone.utc).isoformat(),
+            "calibratedBetaZombie": beta_zombie,
+            "calibratedBetaDengue": beta_dengue,
+            "factors": factors,
+        }
+
+
+def _normalize_dynamo_item(item):
+    return {
+        "SimulationId": str(item.get("SimulationId", "")),
+        "Timestamp": str(item.get("Timestamp", "")),
+        "Seed": int(item.get("Seed", 2026)),
+        "Mode": str(item.get("Mode", "PLAGA_ZOMBIE")),
+        "Runs": int(item.get("Runs", 50)),
+        "SavedLivesMean": round(float(item.get("SavedLivesMean", 0.0)), 1),
+        "HashFirma": str(item.get("HashFirma", "0x00000000")),
+        "BudgetUsed": round(float(item.get("BudgetUsed", 0.0)), 0),
+    }
+
+
+def save_and_fetch_dynamo_audit(audit_entry=None, max_items=8):
+    """
+    Guarda un registro de auditoría en Amazon DynamoDB (SpookyThonSimulations)
+    y devuelve las últimas corridas registradas. Usa try/except seguros para
+    jamás fallar si la tabla o los permisos IAM aún no están desplegados.
+    """
+    global _DYNAMO_DISABLED_IN_CONTAINER, _MEMORY_AUDIT_RING
+
+    if audit_entry is not None:
+        normalized_local = _normalize_dynamo_item(audit_entry)
+        # Evitar duplicados consecutivos con mismo SimulationId
+        _MEMORY_AUDIT_RING = [
+            x for x in _MEMORY_AUDIT_RING if x["SimulationId"] != normalized_local["SimulationId"]
+        ]
+        _MEMORY_AUDIT_RING.insert(0, normalized_local)
+        _MEMORY_AUDIT_RING = _MEMORY_AUDIT_RING[:max_items]
+
+    if BOTO3_AVAILABLE and not _DYNAMO_DISABLED_IN_CONTAINER and os.environ.get("SKIP_AWS_IO") != "1":
+        try:
+            dynamodb = boto3.resource("dynamodb", config=_fast_boto_config())
+            table = dynamodb.Table(DYNAMODB_TABLE)
+
+            if audit_entry is not None:
+                dynamo_item = {
+                    "SimulationId": str(audit_entry["SimulationId"]),
+                    "Timestamp": str(audit_entry["Timestamp"]),
+                    "Seed": int(audit_entry["Seed"]),
+                    "Mode": str(audit_entry["Mode"]),
+                    "Runs": int(audit_entry.get("Runs", 50)),
+                    "SavedLivesMean": Decimal(str(round(float(audit_entry["SavedLivesMean"]), 1))),
+                    "HashFirma": str(audit_entry["HashFirma"]),
+                    "BudgetUsed": Decimal(str(int(round(float(audit_entry["BudgetUsed"]))))),
+                }
+                table.put_item(Item=dynamo_item)
+
+            scan_resp = table.scan(Limit=25)
+            raw_items = scan_resp.get("Items", [])
+            parsed_items = [_normalize_dynamo_item(it) for it in raw_items]
+            parsed_items.sort(key=lambda x: x["Timestamp"], reverse=True)
+            return parsed_items[:max_items], f"dynamodb:{DYNAMODB_TABLE}"
+        except Exception:
+            _DYNAMO_DISABLED_IN_CONTAINER = True
+
+    return list(_MEMORY_AUDIT_RING[:max_items]), "memory-fallback-safe"
+
+
+# ==============================================================================
+# 3. PRNG DETERMINISTA Y MUESTREADORES DE NÚMEROS ALEATORIOS COMUNES
+# ==============================================================================
+def imul32(a, b):
+    return ((a & 0xFFFFFFFF) * (b & 0xFFFFFFFF)) & 0xFFFFFFFF
+
+
 def mulberry32_next(state):
-    """Avanza un paso de 32 bits del generador determinista mulberry32 (para derivar semillas)."""
+    """Avanza exactamente un paso de 32 bits del generador mulberry32(seed)."""
     state = (state + 0x6D2B79F5) & 0xFFFFFFFF
     t = state
-    t = ((t ^ (t >> 15)) * (t | 1)) & 0xFFFFFFFF
-    t ^= (t + (((t ^ (t >> 7)) * (t | 61)) & 0xFFFFFFFF)) & 0xFFFFFFFF
+    t = imul32(t ^ (t >> 15), t | 1)
+    t = (t ^ (t + imul32(t ^ (t >> 7), t | 61))) & 0xFFFFFFFF
     val = ((t ^ (t >> 14)) & 0xFFFFFFFF) / 4294967296.0
     return state, val
 
@@ -121,7 +401,7 @@ def derive_sub_seeds(master_seed, runs):
             seeds.append(base)
         else:
             state, val = mulberry32_next(state)
-            seeds.append(int(val * 4294967296.0) & 0xFFFFFFFF)
+            seeds.append(int(math.floor(val * 4294967296.0)) & 0xFFFFFFFF)
     return seeds
 
 
@@ -135,7 +415,7 @@ def sample_binomial(
     _cos=math.cos,
     _tau=2.0 * math.pi,
 ):
-    """Consume siempre exactamente 2 números de rng para mantener Números Aleatorios Comunes."""
+    """Consume exactamente 2 extracciones de rng para preservar Números Aleatorios Comunes."""
     u1 = rng.random()
     u2 = rng.random()
     if n <= 0 or p <= 0.0:
@@ -150,7 +430,6 @@ def sample_binomial(
 
     mean = n * p
     if mean < 14.0:
-        # Inversión exacta de la CDF Binomial usando únicamente u1
         q = 1.0 - p
         prob = _exp(n * _log(q))
         cdf = prob
@@ -178,10 +457,8 @@ def sample_binomial(
 def sample_hypergeometric(total_pop, success_pop, draws, rng, _sqrt=math.sqrt):
     if draws <= 0 or success_pop <= 0 or total_pop <= 0:
         return 0
-    min_possible = draws - (total_pop - success_pop)
-    if min_possible < 0:
-        min_possible = 0
-    max_possible = draws if draws < success_pop else success_pop
+    min_possible = max(0, draws - (total_pop - success_pop))
+    max_possible = min(draws, success_pop)
     if min_possible >= max_possible:
         return min_possible
 
@@ -200,41 +477,81 @@ def sample_hypergeometric(total_pop, success_pop, draws, rng, _sqrt=math.sqrt):
     p = success_pop / total_pop
     mean = draws * p
     fpc = (total_pop - draws) / (total_pop - 1) if total_pop > 1 else 0.0
-    variance = draws * p * (1.0 - p) * fpc
-    sampled = round(rng.gauss(mean, _sqrt(variance if variance > 0.0 else 0.0)))
-    if sampled < min_possible:
-        return min_possible
-    if sampled > max_possible:
-        return max_possible
-    return sampled
+    var = max(0.0, draws * p * (1.0 - p) * fpc)
+    u1 = max(1e-12, rng.random())
+    u2 = rng.random()
+    z = _sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
+    sampled = round(mean + _sqrt(var) * z)
+    return max(min_possible, min(max_possible, sampled))
 
 
-def compute_shield_score(node_idx, S, I):
+# ==============================================================================
+# 4. MOTOR SEIR + ESCUDO DE CENTRALIDAD Y CERCO PERIMETRAL ADAPTATIVO
+# ==============================================================================
+def compute_shield_score(node_idx, S, E, I, efficacy=0.85):
+    """
+    Índice compuesto del 'Escudo de Centralidad + Cerco Perimetral Adaptativo':
+    1. Base topológica: Conexiones * Infectados_Vecinos * (Sanos_Locales / Pob_Local).
+    2. Anillo Perimetral Adaptativo: Si un nodo central ya presenta brote activo interno
+       (ej. foco en Mercado de Tarqui) o la vacuna tiene menor efectividad, evita diluir
+       vacunas dentro del foco expuesto y amplifica (x2.35) el anillo en sus vecinos sanos.
+    """
     if S[node_idx] <= 0:
         return 0.0
     node = MANTA_NODES[node_idx]
-    connections = len(node["neighbors"])
-    neighbor_zombies = sum(I[nb] for nb in node["neighbors"])
+    neighbors = node["neighbors"]
+    deg = len(neighbors)
+
+    neighbor_infected = 0
+    neighbor_active_hub = False
+    for nb in neighbors:
+        nb_load = I[nb] + 0.5 * E[nb]
+        neighbor_infected += I[nb]
+        if nb_load >= 6 and (len(MANTA_NODES[nb]["neighbors"]) >= 3 or efficacy <= 0.65):
+            neighbor_active_hub = True
+
     healthy_ratio = S[node_idx] / node["population"]
-    return connections * neighbor_zombies * healthy_ratio
+    base_score = deg * neighbor_infected * healthy_ratio
+
+    local_active_load = I[node_idx] + E[node_idx]
+    local_prevalence = local_active_load / node["population"]
+
+    # Verificar si existen vecinos aún sanos alrededor de este foco activo para formar el anillo
+    has_healthy_perimeter = False
+    if local_active_load >= 6:
+        for nb in neighbors:
+            if (S[nb] / MANTA_NODES[nb]["population"]) > 0.35 and (I[nb] + E[nb]) < local_active_load:
+                has_healthy_perimeter = True
+                break
+
+    ring_multiplier = 1.0
+    if local_active_load >= 8 and has_healthy_perimeter and (deg >= 3 or efficacy <= 0.65 or local_prevalence >= 0.008):
+        # Evita desperdiciar dosis en el epicentro expuesto mientras se blinda el anillo vecino
+        ring_multiplier = 0.18
+    elif neighbor_active_hub and local_prevalence < 0.035:
+        # Impulsa el anillo de vacunación preventiva en los barrios colindantes al foco
+        ring_multiplier = 2.35
+
+    return base_score * ring_multiplier
 
 
-def imul32(a, b):
-    return ((a & 0xFFFFFFFF) * (b & 0xFFFFFFFF)) & 0xFFFFFFFF
+def simulate_single_trajectory(run_seed, strategy, config, dataset, record_history=False):
+    nodes = dataset.get("nodes", MANTA_NODES)
+    mobility_matrix = dataset.get("mobilityMatrix")
+    mode_key = config.get("mode", "zombie")
+    mode_meta = dataset.get("modes", {}).get(mode_key, LOCAL_FALLBACK_DATASET["modes"]["zombie"])
 
-
-# ==============================================================================
-# 3. MOTOR DE SIMULACIÓN DIARIA SEIR POR ESTRATEGIA
-# ==============================================================================
-def simulate_single_trajectory(run_seed, strategy, config, record_history=False):
-    num_nodes = len(MANTA_NODES)
+    num_nodes = len(nodes)
     days = config["days"]
     beta = config["beta"]
     sigma = 1.0 / max(1, config["incubationDays"])
-    gamma = EXORCISM_RATE_GAMMA
+    gamma = float(mode_meta.get("recoveryGamma", 0.20))
+    corridor_coupling = float(mode_meta.get("corridorCoupling", 0.025))
+    initial_cases = int(mode_meta.get("initialCases", 10))
     efficacy = max(0.10, min(1.0, config["vaccineEffectiveness"] / 100.0))
+    is_dengue = mode_key == "dengue"
 
-    S = [n["population"] for n in MANTA_NODES]
+    S = [n["population"] for n in nodes]
     S_failed = [0] * num_nodes
     E = [0] * num_nodes
     I = [0] * num_nodes
@@ -255,7 +572,7 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
     )
 
     pz = config["initialNode"]
-    init_z = min(INITIAL_ZOMBIES, S[pz])
+    init_z = min(initial_cases, S[pz])
     S[pz] -= init_z
     I[pz] = init_z
     cum_inf_by_node[pz] = init_z
@@ -304,7 +621,7 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
                         "fumDaysLeft": fum_days_left[k],
                         "closed": node_closed[k] == 1,
                         "cumInf": cum_inf_by_node[k],
-                        "score": round(compute_shield_score(k, S, I), 2),
+                        "score": round(compute_shield_score(k, S, E, I, efficacy), 2),
                     }
                 )
             node_snapshots[d] = snap
@@ -323,7 +640,7 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
 
         brigades_left = 0 if strategy == "none" else config["dailyBrigadeArrival"]
 
-        # FASE 1: INTERVENCIONES Y VACUNACIÓN ESTRICTA A SANOS
+        # FASE 1: INTERVENCIONES COMBINADAS Y VACUNACIÓN ESTRICTA A POBLACIÓN SANA
         if strategy == "random" and cash_rem > 0:
             while brigades_left > 0:
                 can_close = (
@@ -366,21 +683,19 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
             ):
                 max_aff = cash_rem // COST_VACCINE_DOSE
                 elig_pool = sum(S[k] - S_failed[k] for k in range(num_nodes))
-                to_apply = min(cold_chain_doses, max_aff, elig_pool)
-                doses_left = to_apply
+                doses_left = min(cold_chain_doses, min(max_aff, elig_pool))
                 pool_left = elig_pool
 
                 for k in range(num_nodes):
                     if doses_left <= 0:
                         break
-                    elig_k = S[k] - S_failed[k]
-                    if elig_k <= 0:
+                    elig_barrio = S[k] - S_failed[k]
+                    if elig_barrio <= 0:
                         continue
 
-                    alloc = sample_hypergeometric(pool_left, elig_k, doses_left, policy_rng)
+                    alloc = sample_hypergeometric(pool_left, elig_barrio, doses_left, policy_rng)
                     if alloc > S[k]:
                         violations += alloc - S[k]
-                        alloc = S[k]
 
                     imm = sample_binomial(alloc, efficacy, eff_rng)
                     S[k] -= imm
@@ -395,16 +710,21 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
                     total_spent += alloc * COST_VACCINE_DOSE
 
                     doses_left -= alloc
-                    pool_left -= elig_k
+                    pool_left -= elig_barrio
 
         elif strategy == "shield" and cash_rem > 0:
-            if not config["useVaccines"]:
-                max_closures = 8
-            elif efficacy < 0.50:
-                max_closures = max(1, min(5, config["budget"] // 9500))
-            else:
-                max_closures = max(1, min(4, config["budget"] // 12500))
+            pz_is_central = len(nodes[pz]["neighbors"]) >= 3
+            max_closures = (
+                8
+                if not config["useVaccines"]
+                else (
+                    max(1, min(5, config["budget"] // 9000))
+                    if (efficacy <= 0.60 or pz_is_central)
+                    else max(1, min(4, config["budget"] // 12500))
+                )
+            )
 
+            # 2A. Cerco Sanitario Selectivo ($3,500, -75% flujo inter-barrial) en origen y puentes
             if config["useClosure"]:
                 while (
                     brigades_left > 0
@@ -412,21 +732,20 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
                     and total_closures < max_closures
                 ):
                     best_c = -1
-                    best_cs = 0.0
+                    best_c_score = 0.0
                     for k in range(num_nodes):
                         if node_closed[k] == 1:
                             continue
-                        deg = len(MANTA_NODES[k]["neighbors"])
-                        neigh_z = sum(I[nb] for nb in MANTA_NODES[k]["neighbors"])
-                        s_frac = S[k] / MANTA_NODES[k]["population"]
-                        if I[k] >= 5:
-                            c_score = 1500.0 + I[k] * deg * 12.0
-                        elif neigh_z >= 6:
-                            c_score = deg * neigh_z * s_frac * 3.0
-                        else:
-                            c_score = 0.0
-                        if c_score > best_cs:
-                            best_cs = c_score
+                        deg = len(nodes[k]["neighbors"])
+                        neigh_z = sum(I[nb] for nb in nodes[k]["neighbors"])
+                        s_frac = S[k] / nodes[k]["population"]
+                        c_score = 0.0
+                        if I[k] >= 4 or (k == pz and (I[k] + E[k]) >= 3):
+                            c_score = 1800.0 + (I[k] + 0.5 * E[k]) * deg * 15.0
+                        elif neigh_z >= 5:
+                            c_score = deg * neigh_z * s_frac * 3.4
+                        if c_score > best_c_score:
+                            best_c_score = c_score
                             best_c = k
 
                     if best_c == -1:
@@ -442,21 +761,25 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
                     if first_48h is not None and d <= 2 and best_c not in first_48h["closures"]:
                         first_48h["closures"].append(best_c)
 
+            # 2B. Brigada de Fumigación / Control Vectorial ($1,200, -40% contagio local por 5 días)
             if config["useFumigation"]:
                 while brigades_left > 0 and cash_rem >= COST_FUMIGATION:
                     best_f = -1
-                    best_fs = 0.0
+                    best_f_score = 0.0
                     for k in range(num_nodes):
                         if fum_days_left[k] > 0 or S[k] < 150:
                             continue
-                        active_load = I[k] + 0.5 * E[k]
-                        if active_load < 4:
+                        act_load = I[k] + 0.5 * E[k]
+                        if act_load < 3.5:
                             continue
-                        s_frac = S[k] / MANTA_NODES[k]["population"]
-                        deg = len(MANTA_NODES[k]["neighbors"])
-                        f_score = active_load * s_frac * (1.0 + 0.3 * deg)
-                        if f_score > best_fs:
-                            best_fs = f_score
+                        s_frac = S[k] / nodes[k]["population"]
+                        deg = len(nodes[k]["neighbors"])
+                        vector_weight = (
+                            (nodes[k].get("aedesBreteauIndex", 14.0) / 14.0) if is_dengue else 1.0
+                        )
+                        f_score = act_load * s_frac * (1.0 + 0.35 * deg) * vector_weight
+                        if f_score > best_f_score:
+                            best_f_score = f_score
                             best_f = k
 
                     if best_f == -1:
@@ -472,52 +795,57 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
                     if first_48h is not None and d <= 2 and best_f not in first_48h["fumigations"]:
                         first_48h["fumigations"].append(best_f)
 
+            # 2C. Vacunación con Anillo Perimetral Adaptativo ($15/dosis, 100% solo Sanos)
             if (
                 config["useVaccines"]
                 and cold_chain_doses > 0
                 and cash_rem >= COST_VACCINE_DOSE
             ):
+                reserve_ratio = (
+                    0.26
+                    if efficacy <= 0.55
+                    else (0.14 if pz_is_central else 0.08)
+                )
                 fum_reserve = (
-                    min(
-                        cash_rem,
-                        int(round(config["budget"] * (0.22 if efficacy < 0.50 else 0.08))),
-                    )
-                    if (config["useFumigation"] and d <= 16)
+                    min(cash_rem, int(round(config["budget"] * reserve_ratio)))
+                    if (config["useFumigation"] or config["useClosure"]) and d <= 18
                     else 0
                 )
                 spendable = max(0, cash_rem - fum_reserve)
                 max_aff = spendable // COST_VACCINE_DOSE
-                elig_tot = sum(S[k] - S_failed[k] for k in range(num_nodes))
-                doses_left = min(cold_chain_doses, max_aff, elig_tot)
+                elig_total = sum(S[k] - S_failed[k] for k in range(num_nodes))
+                doses_left = min(cold_chain_doses, min(max_aff, elig_total))
 
                 while doses_left > 0:
                     step = min(TACTICAL_BRIGADE_SIZE, doses_left)
                     best_n = -1
-                    best_sc = -1.0
+                    best_s = -1.0
 
                     for k in range(num_nodes):
                         elig = S[k] - S_failed[k]
                         if elig <= 0:
                             continue
-                        sc = compute_shield_score(k, S, I) * (elig / max(1, S[k]))
-                        if sc > best_sc:
-                            best_sc = sc
+                        sc = compute_shield_score(k, S, E, I, efficacy) * (elig / max(1, S[k]))
+                        if sc > best_s:
+                            best_s = sc
                             best_n = k
 
-                    if best_n == -1 or best_sc <= 0.0:
+                    if best_n == -1 or best_s <= 0.0:
                         best_n = -1
-                        best_sc = -1.0
+                        best_s = -1.0
                         for k in range(num_nodes):
                             elig = S[k] - S_failed[k]
                             if elig <= 0:
                                 continue
+                            # Si el foco es central, priorizar primero vecinos conectados al foco
+                            is_ring_nb = 2.2 if (pz in nodes[k]["neighbors"] and k != pz) else 1.0
                             fb = (
-                                len(MANTA_NODES[k]["neighbors"])
-                                * (I[k] + 1.0)
-                                * (elig / MANTA_NODES[k]["population"])
+                                len(nodes[k]["neighbors"])
+                                * is_ring_nb
+                                * (elig / nodes[k]["population"])
                             )
-                            if fb > best_sc:
-                                best_sc = fb
+                            if fb > best_s:
+                                best_s = fb
                                 best_n = k
 
                     if best_n == -1:
@@ -529,7 +857,6 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
                     alloc = min(step, elig_best)
                     if alloc > S[best_n]:
                         violations += alloc - S[best_n]
-                        alloc = S[best_n]
 
                     imm = sample_binomial(alloc, efficacy, eff_rng)
                     S[best_n] -= imm
@@ -553,12 +880,17 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
         new_R = [0] * num_nodes
 
         for k in range(num_nodes):
-            node = MANTA_NODES[k]
+            node = nodes[k]
             rng = epi_rng
 
             dispersion = 0.60 + 0.80 * rng.random()
             local_mod = FUMIGATION_LOCAL_MULT if fum_days_left[k] > 0 else 1.0
-            local_force = local_mod * beta * (I[k] / node["population"])
+            breteau_mod = (
+                (0.85 + 0.30 * (node.get("aedesBreteauIndex", 14.0) / 15.0))
+                if is_dengue
+                else 1.0
+            )
+            local_force = local_mod * breteau_mod * beta * (I[k] / node["population"])
 
             hub_factor = len(node["neighbors"]) / 3.0
             neigh_force = 0.0
@@ -568,18 +900,23 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
                     c_mod *= CLOSURE_FLOW_MULT
                 if node_closed[nb_idx] == 1:
                     c_mod *= CLOSURE_FLOW_MULT
+
+                edge_coupling = (
+                    mobility_matrix[k][nb_idx]
+                    if (is_dengue and mobility_matrix is not None)
+                    else (corridor_coupling * hub_factor)
+                )
                 neigh_force += (
                     c_mod
-                    * CORRIDOR_COUPLING
-                    * hub_factor
+                    * edge_coupling
                     * beta
-                    * (I[nb_idx] / MANTA_NODES[nb_idx]["population"])
+                    * (I[nb_idx] / nodes[nb_idx]["population"])
                 )
 
             lam = (local_force + neigh_force) * dispersion
-            prob_bite = 1.0 - math.exp(-lam) if lam > 0.0 else 0.0
+            prob_exposure = 1.0 - math.exp(-lam) if lam > 0.0 else 0.0
 
-            new_E[k] = sample_binomial(S[k], prob_bite, rng)
+            new_E[k] = sample_binomial(S[k], prob_exposure, rng)
             new_I[k] = sample_binomial(E[k], sigma, rng)
             new_R[k] = sample_binomial(I[k], gamma, rng)
 
@@ -621,7 +958,7 @@ def simulate_single_trajectory(run_seed, strategy, config, record_history=False)
 
 
 # ==============================================================================
-# 4. MONTE CARLO Y GENERACIÓN DE INFORME EJECUTIVO PARA EL ALCALDE DE MANTA
+# 5. MONTE CARLO, SHARDING FAN-OUT E INFORME EJECUTIVO PARA EL ALCALDE DE MANTA
 # ==============================================================================
 def compute_stats(arr):
     if not arr:
@@ -635,7 +972,6 @@ def compute_stats(arr):
 
 def build_mayor_recommendation(config, summary):
     pz_node = MANTA_NODES[config["initialNode"]]
-    s_none = summary["none"]
     s_rand = summary["random"]
     s_shield = summary["shield"]
 
@@ -651,7 +987,7 @@ def build_mayor_recommendation(config, summary):
             pz_node["neighbors"],
             key=lambda i: len(MANTA_NODES[i]["neighbors"]),
             reverse=True,
-        )[:2]
+        )[:3]
     ]
 
     targets = [pz_node["name"]]
@@ -680,44 +1016,58 @@ def build_mayor_recommendation(config, summary):
     vac_cost = int(round(s_shield["meanDoses"] * COST_VACCINE_DOSE))
     spent_mean = int(round(s_shield["meanSpent"]))
 
+    mode_label = (
+        "Epidemia de Dengue (INEC/MSP)"
+        if config.get("mode") == "dengue"
+        else "Plaga Zombie (Track B)"
+    )
+
     return {
+        "modeLabel": mode_label,
         "first48HoursBarrios": targets,
         "summary": (
-            f"Señor Alcalde de Manta: Ante el brote iniciado en {pz_node['name']}, "
-            f"activar la estrategia inteligente con ${config['budget']:,} (ejecutando ~${spent_mean:,}) "
-            f"permite salvar en promedio {saved_mean:,} vidas [Rango: {saved_min:,} - {saved_max:,}] "
-            f"en {config['days']} días."
+            f"Señor Alcalde de Manta: Ante el brote ({mode_label}) detectado en {pz_node['name']}, "
+            f"activar el 'Escudo de Centralidad + Cerco Perimetral Adaptativo' con ${config['budget']:,} "
+            f"(ejecutando ~${spent_mean:,}) salva en promedio {saved_mean:,} vidas "
+            f"[Rango: {saved_min:,} - {saved_max:,}] en {config['days']} días."
         ),
         "first48HoursPlan": (
             f"Intervenir en las primeras 48 horas: {', '.join(targets)}. "
-            f"Contener y fumigar {pz_node['name']} de inmediato mientras se blindan sus accesos "
-            f"principales ({' y '.join(priority_neighbors)})."
+            f"Aplicar cerco sanitario y fumigación en {pz_node['name']} mientras se despliega "
+            f"el anillo perimetral de vacunación sobre {', '.join(priority_neighbors[:2])}."
         ),
         "budgetDistribution": (
             f"Distribución óptima de ${config['budget']:,}: "
-            f"${close_cost:,} en cierres selectivos viales (-75% flujo vecino), "
-            f"${fum_cost:,} en brigadas de fumigación (-40% contagio local por 5 días), y "
+            f"${close_cost:,} en cercos sanitarios selectivos (-75% flujo inter-barrial), "
+            f"${fum_cost:,} en brigadas de fumigación/control vectorial (-40% contagio local por 5 días), y "
             f"${vac_cost:,} en {int(round(s_shield['meanDoses'])):,} dosis de vacuna ($15 c/u) "
             f"aplicadas estrictamente a población sana (efectividad {config['vaccineEffectiveness']}%)."
         ),
         "livesSavedComparison": (
             f"Frente a no hacer nada: {saved_mean:,} vidas salvadas en promedio [{saved_min:,} - {saved_max:,}]. "
             f"Frente al reparto al azar ({rand_mean:,} salvados [{rand_min:,} - {rand_max:,}]): "
-            f"+{extra_vs_rand:,} ciudadanos adicionales protegidos con el mismo presupuesto."
+            f"+{extra_vs_rand:,} ciudadanos adicionales protegidos con el mismo techo presupuestario."
         ),
         "justification": (
-            "En vez de diluir recursos al azar por toda la ciudad, la estrategia protege los cruces viales "
-            "más conectados como un cortafuegos, apaga el contagio local en el barrio origen y vacuna "
-            "únicamente a vecinos sanos sin desperdiciar ni una sola dosis."
+            "Cuando el brote golpea un nodo central o baja la efectividad vacunal, el algoritmo evita "
+            "desperdiciar dosis dentro del foco ya expuesto: sella y fumiga el origen mientras levanta "
+            "un anillo inmunológico preventivo en los barrios vecinos conectados."
         ),
     }
 
 
 def run_monte_carlo(config):
-    runs = config["runs"]
+    dataset, dataset_source = load_calibration_dataset()
+    explicit_sub_seeds = config.get("subSeeds")
+    if isinstance(explicit_sub_seeds, list) and len(explicit_sub_seeds) > 0:
+        sub_seeds = [int(s) & 0xFFFFFFFF for s in explicit_sub_seeds[:500]]
+    else:
+        sub_seeds = derive_sub_seeds(config["seed"], config["runs"])
+
+    runs = len(sub_seeds)
     days = config["days"]
     num_nodes = len(MANTA_NODES)
-    sub_seeds = derive_sub_seeds(config["seed"], runs)
+    include_detail = config.get("workerIndex", 0) == 0
 
     strategy_keys = ("none", "random", "shield")
     agg = {}
@@ -725,6 +1075,8 @@ def run_monte_carlo(config):
         agg[key] = {
             "infected": [],
             "saved": [],
+            "doses": [],
+            "spent": [],
             "doses_sum": 0,
             "imm_sum": 0,
             "fum_sum": 0,
@@ -759,21 +1111,24 @@ def run_monte_carlo(config):
             fnv_hash ^= (val >> shift) & 0xFF
             fnv_hash = imul32(fnv_hash, 0x01000193)
 
-    # Ejecución simultánea lógica por semilla para varianza reducida (Common Random Numbers)
     for r, seed in enumerate(sub_seeds):
-        rec = r == 0
+        rec = include_detail and (r == 0)
         res_map = {
-            "none": simulate_single_trajectory(seed, "none", config, rec),
-            "random": simulate_single_trajectory(seed, "random", config, rec),
-            "shield": simulate_single_trajectory(seed, "shield", config, rec),
+            "none": simulate_single_trajectory(seed, "none", config, dataset, rec),
+            "random": simulate_single_trajectory(seed, "random", config, dataset, rec),
+            "shield": simulate_single_trajectory(seed, "shield", config, dataset, rec),
         }
         base_inf = res_map["none"]["cumulativeInfected"]
 
         for key in strategy_keys:
             res = res_map[key]
             b = agg[key]
+            saved_val = base_inf - res["cumulativeInfected"]
             b["infected"].append(res["cumulativeInfected"])
-            b["saved"].append(base_inf - res["cumulativeInfected"])
+            b["saved"].append(saved_val)
+            b["doses"].append(res["totalDosesApplied"])
+            b["spent"].append(res["totalBudgetSpent"])
+
             b["doses_sum"] += res["totalDosesApplied"]
             b["imm_sum"] += res["totalImmunized"]
             b["fum_sum"] += res["totalFumigations"]
@@ -823,6 +1178,7 @@ def run_monte_carlo(config):
                 b["first48h"] = res["first48h"]
 
     summary = {}
+    shard_raw = {}
     for key in strategy_keys:
         b = agg[key]
         inf_stats = compute_stats(b["infected"])
@@ -859,15 +1215,76 @@ def run_monte_carlo(config):
             "first48h": b["first48h"],
         }
 
-    hash_hex = f"0x{fnv_hash:08X}"
-    mayor_rec = build_mayor_recommendation(config, summary)
+        if config.get("totalWorkers", 1) > 1:
+            shard_raw[key] = {
+                "infected": b["infected"],
+                "saved": b["saved"],
+                "doses": b["doses"],
+                "spent": b["spent"],
+                "dosesSum": b["doses_sum"],
+                "immSum": b["imm_sum"],
+                "fumSum": b["fum_sum"],
+                "closeSum": b["close_sum"],
+                "spentSum": b["spent_sum"],
+                "violationsSum": b["violations_sum"],
+                "nodeVacSum": b["node_vac"],
+                "nodeFumSum": b["node_fum"],
+                "nodeCloseSum": b["node_close"],
+                "nodeInfSum": b["node_inf"],
+                "dailySums": {
+                    "S": b["daily_S"],
+                    "E": b["daily_E"],
+                    "I": b["daily_I"],
+                    "R": b["daily_R"],
+                    "cumInf": b["daily_cum_inf"],
+                    "prot": b["daily_prot"],
+                },
+                "dailyMin": {
+                    "cumInf": b["daily_min_cum"],
+                    "I": b["daily_min_I"],
+                    "prot": b["daily_min_prot"],
+                },
+                "dailyMax": {
+                    "cumInf": b["daily_max_cum"],
+                    "I": b["daily_max_I"],
+                    "prot": b["daily_max_prot"],
+                },
+                "sampleSnapshots": b["sampleSnapshots"],
+                "first48h": b["first48h"],
+            }
 
-    return {
+    hash_hex = f"0x{fnv_hash:08X}"
+    mayor_rec = build_mayor_recommendation(config, summary) if include_detail else None
+
+    audit_history = []
+    audit_source = "skipped-worker-shard"
+    if config.get("totalWorkers", 1) == 1 and config.get("recordAudit", True):
+        mode_code = "DENGUE_INEC_MSP" if config.get("mode") == "dengue" else "PLAGA_ZOMBIE"
+        audit_entry = {
+            "SimulationId": f"SIM-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6].upper()}",
+            "Timestamp": datetime.now(timezone.utc).isoformat(),
+            "Seed": config["seed"],
+            "Mode": mode_code,
+            "Runs": runs,
+            "SavedLivesMean": round(summary["shield"]["savedStats"]["mean"], 1),
+            "HashFirma": hash_hex,
+            "BudgetUsed": round(summary["shield"]["meanSpent"], 0),
+        }
+        audit_history, audit_source = save_and_fetch_dynamo_audit(audit_entry)
+    elif include_detail:
+        audit_history, audit_source = save_and_fetch_dynamo_audit(None)
+
+    response_payload = {
         "ok": True,
-        "engine": "aws-lambda-python3.12",
+        "engine": "aws-lambda-python3.12-multilayer",
+        "datasetSource": dataset_source,
+        "auditStorageSource": audit_source,
+        "auditHistory": audit_history,
+        "workerIndex": config.get("workerIndex", 0),
+        "totalWorkers": config.get("totalWorkers", 1),
         "hashHex": hash_hex,
         "subSeeds": sub_seeds[:10],
-        "scenario": config,
+        "scenario": {k: v for k, v in config.items() if k != "subSeeds"},
         "strategies": {
             "sinIntervencion": {
                 "infectedMean": round(summary["none"]["infectedStats"]["mean"], 1),
@@ -910,9 +1327,14 @@ def run_monte_carlo(config):
         "summary": summary,
     }
 
+    if shard_raw:
+        response_payload["shardRaw"] = shard_raw
+
+    return response_payload
+
 
 # ==============================================================================
-# 5. PARSEO DE ENTRADA Y HANDLER PRINCIPAL AWS LAMBDA
+# 6. PARSEO SEGURO DE ENTRADA (INPUT CLAMPING) Y HANDLER AWS LAMBDA
 # ==============================================================================
 def resolve_initial_node(raw_node):
     if isinstance(raw_node, int):
@@ -942,30 +1364,62 @@ def parse_scenario_payload(body_dict):
             return bool(body_dict[key])
         return default
 
+    raw_mode = str(body_dict.get("mode", "zombie")).strip().lower()
+    mode = "dengue" if raw_mode in ("dengue", "dengue_inec_msp", "msp", "real") else "zombie"
+    default_beta = 0.58 if mode == "dengue" else 0.72
+    default_inc = 5 if mode == "dengue" else 3
+    default_eff = 80.0 if mode == "dengue" else 85.0
+
     raw_init = body_dict.get("initialNode", body_dict.get("patientZeroIndex", 6))
 
-    return {
+    cfg = {
+        "mode": mode,
         "seed": get_num(("seed",), 2026, int, 0, 2147483647),
-        "runs": get_num(("runs",), 50, int, 1, 300),
+        "runs": get_num(("runs",), 50, int, 1, 500),
         "days": get_num(("days",), 60, int, 10, 365),
-        "beta": get_num(("beta",), 0.72, float, 0.05, 2.5),
+        "beta": get_num(("beta",), default_beta, float, 0.05, 2.50),
         "vaccines": get_num(("vaccines", "totalVaccines"), 24000, int, 0, 100000),
         "vaccineEffectiveness": get_num(
-            ("vaccineEffectiveness", "vaccineEfficacyPct"), 85, float, 10.0, 100.0
+            ("vaccineEffectiveness", "vaccineEfficacyPct"), default_eff, float, 10.0, 100.0
         ),
         "initialNode": resolve_initial_node(raw_init),
         "budget": get_num(("budget", "totalBudget"), 50000, int, 0, 2000000),
-        "incubationDays": get_num(("incubationDays",), 3, int, 1, 30),
+        "incubationDays": get_num(("incubationDays",), default_inc, int, 1, 30),
         "dailyDoseArrival": get_num(("dailyDoseArrival",), 800, int, 0, 20000),
         "dailyBrigadeArrival": get_num(("dailyBrigadeArrival",), 2, int, 0, 20),
         "useVaccines": get_bool("useVaccines", True),
         "useFumigation": get_bool("useFumigation", True),
         "useClosure": get_bool("useClosure", True),
+        "workerIndex": get_num(("workerIndex",), 0, int, 0, 32),
+        "totalWorkers": get_num(("totalWorkers",), 1, int, 1, 32),
+        "recordAudit": get_bool("recordAudit", True),
     }
+
+    if isinstance(body_dict.get("subSeeds"), list):
+        clean_seeds = []
+        for item in body_dict["subSeeds"][:500]:
+            try:
+                clean_seeds.append(int(item) & 0xFFFFFFFF)
+            except (ValueError, TypeError):
+                pass
+        if clean_seeds:
+            cfg["subSeeds"] = clean_seeds
+            cfg["runs"] = len(clean_seeds)
+
+    if body_dict.get("calibrateWithLiveWeather") is True:
+        weather = fetch_manta_live_weather()
+        cfg["beta"] = (
+            weather["calibratedBetaDengue"]
+            if mode == "dengue"
+            else weather["calibratedBetaZombie"]
+        )
+        cfg["weatherSnapshot"] = weather
+
+    return cfg
 
 
 def lambda_handler(event, context):
-    """Punto de entrada oficial para AWS Lambda (Python 3.12) con Function URL o API Gateway."""
+    """Handler principal AWS Lambda (Python 3.12) con soporte Fan-Out, S3, DynamoDB y Open-Meteo."""
     if not isinstance(event, dict):
         event = {}
 
@@ -975,7 +1429,6 @@ def lambda_handler(event, context):
         or "POST"
     ).upper()
 
-    # Preflight CORS
     if http_method == "OPTIONS":
         return {
             "statusCode": 200,
@@ -994,6 +1447,51 @@ def lambda_handler(event, context):
 
         if not isinstance(payload, dict):
             payload = {}
+
+        action = str(payload.get("action", "simulate")).strip().lower()
+
+        if action == "weather":
+            weather = fetch_manta_live_weather()
+            return {
+                "statusCode": 200,
+                "headers": CORS_HEADERS,
+                "body": json.dumps({"ok": True, "weather": weather}, ensure_ascii=False),
+            }
+
+        if action == "record_audit":
+            entry = {
+                "SimulationId": str(
+                    payload.get("SimulationId")
+                    or f"SIM-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6].upper()}"
+                ),
+                "Timestamp": str(payload.get("Timestamp") or datetime.now(timezone.utc).isoformat()),
+                "Seed": int(payload.get("Seed", 2026)),
+                "Mode": str(payload.get("Mode", "PLAGA_ZOMBIE")),
+                "Runs": int(payload.get("Runs", 50)),
+                "SavedLivesMean": float(payload.get("SavedLivesMean", 0.0)),
+                "HashFirma": str(payload.get("HashFirma", "0x00000000")),
+                "BudgetUsed": float(payload.get("BudgetUsed", 0.0)),
+            }
+            history, source = save_and_fetch_dynamo_audit(entry)
+            return {
+                "statusCode": 200,
+                "headers": CORS_HEADERS,
+                "body": json.dumps(
+                    {"ok": True, "auditStorageSource": source, "auditHistory": history},
+                    ensure_ascii=False,
+                ),
+            }
+
+        if action == "list_audits":
+            history, source = save_and_fetch_dynamo_audit(None)
+            return {
+                "statusCode": 200,
+                "headers": CORS_HEADERS,
+                "body": json.dumps(
+                    {"ok": True, "auditStorageSource": source, "auditHistory": history},
+                    ensure_ascii=False,
+                ),
+            }
 
         scenario_cfg = parse_scenario_payload(payload)
         result = run_monte_carlo(scenario_cfg)

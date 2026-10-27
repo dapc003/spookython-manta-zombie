@@ -3,11 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Operación Contención Manta · Nivel Pro (Track B: La Plaga Zombie)</title>
+  <title>Operación Contención Manta · Arquitectura Multicapa AWS (SpookyThon 2026)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <link rel="stylesheet" href="./styles.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -18,16 +20,16 @@
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand-group">
-        <div class="brand-emblem" aria-hidden="true">☣</div>
+        <div class="brand-emblem" id="brandEmblem" aria-hidden="true">☣</div>
         <div>
           <div class="eyebrow-row">
-            <span class="badge badge-danger">TRACK B · LA PLAGA ZOMBIE</span>
-            <span class="badge badge-pro">NIVEL PRO · ANTI-BROTE SORPRESA</span>
-            <span class="badge badge-outline">MANTA · 8 NODOS / 100,000 HAB.</span>
+            <span class="badge badge-danger" id="topModeBadge">TRACK B · LA PLAGA ZOMBIE</span>
+            <span class="badge badge-pro">AWS FAN-OUT ×5 · S3 · DYNAMODB</span>
+            <span class="badge badge-outline">MANTA GPS · 8 NODOS / 100,000 HAB.</span>
           </div>
           <h1>Operación Contención Manta</h1>
-          <p class="subtitle">
-            Simulador Epidemiológico SEIR Reproducible (<code>mulberry32</code>), Optimización Presupuestaria y Monte Carlo
+          <p class="subtitle" id="topSubtitle">
+            Simulador Epidemiológico SEIR Reproducible (<code>mulberry32</code>), Calibración INEC/MSP + Open-Meteo y Escudo Perimetral Adaptativo
           </p>
         </div>
       </div>
@@ -37,10 +39,10 @@
           <span class="dot dot-cyan"></span>
           <span>PRNG: <strong id="activeSeedBadge">mulberry32(2026)</strong></span>
         </div>
-        <div class="telemetry-pill" title="Firma de verificación determinista de los resultados actuales">
-          <span>Hash: <code id="determinismHash">0x--------</code></span>
+        <div class="telemetry-pill" title="Firma FNV-1a de 32 bits idéntica en corrida simple o Fan-Out de 5 Workers">
+          <span>Hash FNV-1a: <code id="determinismHash">0x--------</code></span>
         </div>
-        <div class="telemetry-pill pill-strict" title="Auditoría activa: 0 vacunas aplicadas a Mordidos (E), Zombies (I) o Exorcizados (R)">
+        <div class="telemetry-pill pill-strict" title="Auditoría activa: 0 vacunas aplicadas a Expuestos (E), Infectados (I) o Inmunes (R)">
           <span>🛡️ Regla Estricta: <strong id="strictAuditBadge">100% Solo 🟢 Sanos</strong></span>
         </div>
       </div>
@@ -48,22 +50,78 @@
   </header>
 
   <main class="dashboard-container">
-    <!-- CONEXIÓN CLOUD AWS LAMBDA + FALLBACK INTELIGENTE -->
+    <!-- BARRA SUPERIOR CIENTÍFICA: INTERRUPTOR DE MODO (ZOMBIE <-> DENGUE INEC/MSP) + CLIMA REAL OPEN-METEO -->
+    <section class="panel mode-climate-panel" aria-label="Modo epidemiológico y calibración climática en tiempo real">
+      <div class="mode-switch-block">
+        <span class="section-mini-label">MODO DE SIMULACIÓN EPIDEMIOLÓGICA</span>
+        <div class="mode-toggle-group" role="tablist" aria-label="Selector de modo epidemiológico">
+          <button type="button" id="btnModeZombie" class="mode-switch-btn active" data-epi-mode="zombie" role="tab" aria-selected="true">
+            🧟 Modo: Plaga Zombie (Track B)
+          </button>
+          <button type="button" id="btnModeDengue" class="mode-switch-btn" data-epi-mode="dengue" role="tab" aria-selected="false">
+            🦟 Modo Real: Epidemia Dengue Manta (Datos INEC/MSP)
+          </button>
+        </div>
+        <p class="mode-helper-text" id="modeHelperText">
+          Escenario competitivo Track B calibrado sobre los 8 nodos viales de Manta (<code>&beta;=0.72</code>, incubación <code>3d</code>, eficacia <code>85%</code>).
+        </p>
+      </div>
+
+      <div class="weather-live-widget" aria-live="polite">
+        <div class="weather-widget-top">
+          <div class="weather-title-wrap">
+            <span class="weather-live-dot" id="weatherLiveDot"></span>
+            <strong>🛰️ Clima Real en Manta (Open-Meteo API)</strong>
+            <span class="weather-coords-tag" id="weatherSourceBadge">-0.9677, -80.7089</span>
+          </div>
+          <button type="button" id="btnCalibrateWeather" class="btn btn-weather btn-sm" title="Recalibra la tasa de contagio β usando la temperatura, humedad y lluvia reales de Manta en este instante">
+            🌡️ Calibrar &beta; con Clima Real de Manta
+          </button>
+        </div>
+
+        <div class="weather-metrics-row">
+          <div class="weather-chip">
+            <span class="w-label">🌡️ Temperatura</span>
+            <strong class="w-val" id="weatherTempVal">-- °C</strong>
+          </div>
+          <div class="weather-chip">
+            <span class="w-label">💧 Humedad Rel.</span>
+            <strong class="w-val" id="weatherHumVal">-- %</strong>
+          </div>
+          <div class="weather-chip">
+            <span class="w-label">🌧️ Precipitación</span>
+            <strong class="w-val" id="weatherPrecipVal">-- mm</strong>
+          </div>
+          <div class="weather-chip weather-chip-highlight">
+            <span class="w-label">🦟 Factor Vectorial</span>
+            <strong class="w-val" id="weatherFactorVal">1.00&times;</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONEXIÓN CLOUD AWS LAMBDA + FAN-OUT PARALELO 5 WORKERS -->
     <section class="panel cloud-panel" aria-labelledby="cloudPanelTitle">
       <div class="cloud-header-row">
         <div>
           <div class="cloud-title-group">
-            <h2 id="cloudPanelTitle">☁️ Conexión Cloud AWS Lambda</h2>
-            <span class="badge badge-outline">PYTHON 3.12 · SERVERLESS</span>
+            <h2 id="cloudPanelTitle">☁️ Conexión Cloud AWS Lambda Multicapa</h2>
+            <span class="badge badge-outline">PYTHON 3.12 · FAN-OUT &times;5</span>
+            <span class="badge badge-outline" id="datasetSourcePill">S3 / INEC-MSP: Activo</span>
           </div>
           <p class="panel-desc">
-            Pega la <strong>Function URL</strong> de AWS Lambda para ejecutar Monte Carlo en la nube. Si está vacía o cae la red en pleno pitch, el <strong>Fallback Inteligente</strong> resuelve en local en milisegundos.
+            Ejecuta de 50 a 500 corridas dividiendo las sub-semillas en <strong>5 peticiones paralelas simultáneas (<code>Promise.all</code>)</strong> con idéntico Hash FNV-1a. Incluye <strong>Fallback Inteligente Local</strong> en milisegundos.
           </p>
         </div>
 
-        <div id="cloudStatusPill" class="cloud-status-pill mode-local" role="status" aria-live="polite">
-          <span id="cloudStatusDot" class="cloud-dot"></span>
-          <span id="cloudStatusText">⚡ Motor Local Activo (Fallback Instantáneo)</span>
+        <div class="cloud-pills-wrap">
+          <div id="cloudParallelBadge" class="parallel-workers-pill hidden" role="status">
+            ⚡ Paralelismo Cloud AWS: 5 Workers Lambda concurrentes
+          </div>
+          <div id="cloudStatusPill" class="cloud-status-pill mode-local" role="status" aria-live="polite">
+            <span id="cloudStatusDot" class="cloud-dot"></span>
+            <span id="cloudStatusText">⚡ Motor Local Activo (Fallback Instantáneo)</span>
+          </div>
         </div>
       </div>
 
@@ -87,14 +145,53 @@
       </div>
     </section>
 
-    <!-- FORMULARIO UNIFICADO: PARÁMETROS BASE + PANEL ANTI-BROTE SORPRESA -->
+    <!-- BARRA DESTACADA: RESPUESTA RÁPIDA AL BROTE SORPRESA DEL JURADO + AUTO-OPTIMIZADOR -->
+    <section class="panel quick-surprise-bar" aria-labelledby="quickSurpriseTitle">
+      <div class="quick-surprise-top">
+        <div>
+          <div class="surprise-title-row">
+            <h2 id="quickSurpriseTitle">🎃 Respuesta Rápida al Brote Sorpresa del Jurado</h2>
+            <span class="badge badge-pro">1 CLIC + AUTO-IA PRESUPUESTARIA</span>
+          </div>
+          <p class="panel-desc">
+            Dispara mutaciones extremas en vivo durante la defensa y deja que el optimizador reasigne el presupuesto para maximizar vidas salvadas.
+          </p>
+        </div>
+
+        <button type="button" id="btnAutoOptimize" class="btn btn-optimizer">
+          🧠 Auto-Optimizar Presupuesto y Estrategia
+        </button>
+      </div>
+
+      <div class="quick-challenge-buttons" role="group" aria-label="Retos sorpresa de 1 clic del jurado">
+        <button type="button" id="btnChallengeBeta2x" class="btn-challenge">
+          🔥 Contagio &times;2
+        </button>
+        <button type="button" id="btnChallengeHalfVac" class="btn-challenge">
+          💉 Mitad de Vacunas
+        </button>
+        <button type="button" id="btnChallengeTarqui" class="btn-challenge">
+          🛒 Foco en Mercado de Tarqui
+        </button>
+        <button type="button" id="btnChallengeVariant50" class="btn-challenge">
+          🧬 Variante Resistente (Vacuna 50%)
+        </button>
+        <button type="button" id="btnChallengeRestore" class="btn-challenge btn-challenge-reset">
+          ↺ Restaurar Escenario Base
+        </button>
+      </div>
+
+      <div id="optimizerBanner" class="optimizer-banner hidden" role="status" aria-live="polite"></div>
+    </section>
+
+    <!-- FORMULARIO UNIFICADO: PARÁMETROS BASE + CONSOLA ANTI-BROTE SORPRESA -->
     <form id="simForm" class="sim-master-form" novalidate>
       <!-- PANEL 1: PARÁMETROS EPIDEMIOLÓGICOS Y MONTE CARLO -->
       <section class="panel controls-panel" aria-labelledby="controlsTitle">
         <div class="panel-header">
           <div>
             <h2 id="controlsTitle">⚙️ Parámetros Base del Brote y Monte Carlo</h2>
-            <p class="panel-desc">Configura la semilla determinista, corridas estocásticas y biología base de la plaga.</p>
+            <p class="panel-desc">Configura la semilla determinista, corridas estocásticas (50–500 activa Fan-Out &times;5) y biología de transmisión.</p>
           </div>
           <div class="controls-actions-top">
             <button type="button" id="btnVerifyDeterminism" class="btn btn-ghost btn-sm" title="Re-ejecuta dos veces con la misma semilla y verifica igualdad exacta bit a bit">
@@ -124,10 +221,10 @@
               <output id="outRuns" for="rangeRuns" class="mono-val">50</output>
             </div>
             <div class="dual-input">
-              <input type="range" id="rangeRuns" min="1" max="200" step="1" value="50" />
+              <input type="range" id="rangeRuns" min="1" max="500" step="1" value="50" />
               <input type="number" id="inputRuns" name="runs" value="50" min="1" max="500" step="1" required />
             </div>
-            <small class="field-help">Sub-semillas derivadas de la principal</small>
+            <small class="field-help">50–500 corridas = 5 Workers Lambda paralelos</small>
           </div>
 
           <!-- 3. Días -->
@@ -150,7 +247,7 @@
               <span class="hint-tag">Origen ☣</span>
             </div>
             <select id="selectPatientZero" name="patientZero"></select>
-            <small class="field-help">Foco inicial del brote zombie</small>
+            <small class="field-help">Foco geoespacial inicial en Manta</small>
           </div>
 
           <!-- 5. Tasa de Contagio (beta) -->
@@ -160,26 +257,26 @@
               <output id="outBeta" for="rangeBeta" class="mono-val">0.72</output>
             </div>
             <div class="dual-input">
-              <input type="range" id="rangeBeta" min="0.10" max="1.50" step="0.01" value="0.72" />
+              <input type="range" id="rangeBeta" min="0.10" max="2.20" step="0.01" value="0.72" />
               <input type="number" id="inputBeta" name="beta" value="0.72" min="0.05" max="2.50" step="0.01" required />
             </div>
-            <small class="field-help">Velocidad de transmisión por contacto</small>
+            <small class="field-help">Calibrable con clima real Open-Meteo</small>
           </div>
 
           <!-- 6. Días de Incubación -->
           <div class="control-field">
             <div class="label-row">
-              <label for="inputIncubation">Días de Incubación</label>
+              <label for="inputIncubation">Días de Incubación (1/&sigma;)</label>
               <output id="outIncubation" for="rangeIncubation" class="mono-val">3 d</output>
             </div>
             <div class="dual-input">
               <input type="range" id="rangeIncubation" min="1" max="14" step="1" value="3" />
               <input type="number" id="inputIncubation" name="incubation" value="3" min="1" max="30" step="1" required />
             </div>
-            <small class="field-help">Paso 🟡 Mordido &rarr; 🔴 Zombie</small>
+            <small class="field-help" id="incubationHelpText">Latencia 🟡 Mordido &rarr; 🔴 Zombie</small>
           </div>
 
-          <!-- 7. Total de Vacunas (Tope físico disponible) -->
+          <!-- 7. Total de Vacunas -->
           <div class="control-field">
             <div class="label-row">
               <label for="inputVaccines">Stock Máx. de Vacunas</label>
@@ -189,7 +286,7 @@
               <input type="range" id="rangeVaccines" min="0" max="100000" step="500" value="24000" />
               <input type="number" id="inputVaccines" name="vaccines" value="24000" min="0" max="100000" step="100" required />
             </div>
-            <small class="field-help">Tope físico regional (solo para 🟢 Sanos)</small>
+            <small class="field-help">Tope físico regional (100% solo 🟢 Sanos)</small>
           </div>
 
           <!-- Botón Ejecutar -->
@@ -204,24 +301,24 @@
         <div id="reproBanner" class="repro-banner hidden" role="status" aria-live="polite"></div>
       </section>
 
-      <!-- PANEL 2: PANEL ANTI-BROTE SORPRESA DEL JURADO (NIVEL PRO) -->
+      <!-- PANEL 2: CONSOLA DE PRESUPUESTO E INTERVENCIONES COMBINADAS -->
       <section class="panel surprise-panel" aria-labelledby="surpriseTitle">
         <div class="panel-header">
           <div>
             <div class="surprise-title-row">
-              <h2 id="surpriseTitle">🚨 Panel Anti-Brote Sorpresa del Jurado (Nivel Pro)</h2>
-              <span class="badge badge-pro"> DEFENSA EN VIVO</span>
+              <h2 id="surpriseTitle">🛡️ Consola Presupuestaria e Intervenciones Combinadas</h2>
+              <span class="badge badge-pro">CERCO PERIMETRAL ADAPTATIVO</span>
             </div>
             <p class="panel-desc">
-              Adapta en tiempo real la estrategia ante variantes resistentes, recortes presupuestarios, llegada escalonada e intervenciones combinadas.
+              Ajusta efectividad biológica, techo presupuestario, logística diaria y portafolio de acciones sanitarias con costos reales.
             </p>
           </div>
 
-          <div class="preset-pills" aria-label="Escenarios rápidos de prueba del jurado">
-            <span class="preset-label">Pruebas Rápidas:</span>
+          <div class="preset-pills" aria-label="Perfiles preconfigurados">
+            <span class="preset-label">Perfiles COE:</span>
             <button type="button" class="btn-preset" data-preset="standard">Estándar ($50k · 85%)</button>
-            <button type="button" class="btn-preset" data-preset="resistant">🧬 Variante Resistente (25% Efec.)</button>
-            <button type="button" class="btn-preset" data-preset="austerity">💸 Austeridad ($22k · Lento)</button>
+            <button type="button" class="btn-preset" data-preset="resistant">🧬 Cepa Escape (25% Efec.)</button>
+            <button type="button" class="btn-preset" data-preset="austerity">💸 Austeridad ($22k)</button>
             <button type="button" class="btn-preset" data-preset="hyper">🔥 Hiperbrote (&beta;=1.05 · $75k)</button>
           </div>
         </div>
@@ -237,7 +334,7 @@
               <input type="range" id="rangeEfficacy" min="10" max="100" step="1" value="85" />
               <input type="number" id="inputEfficacy" value="85" min="10" max="100" step="1" required />
             </div>
-            <small class="field-help">10%–100% (simula cepas parcialmente resistentes)</small>
+            <small class="field-help">10% a 100% (activa anillo vecino si baja)</small>
           </div>
 
           <!-- Presupuesto Total ($) -->
@@ -250,7 +347,7 @@
               <input type="range" id="rangeBudget" min="0" max="300000" step="1000" value="50000" />
               <input type="number" id="inputBudget" value="50000" min="0" max="2000000" step="500" required />
             </div>
-            <small class="field-help">Techo financiero para vacunas, fumigación y cierres</small>
+            <small class="field-help">Techo financiero municipal para las 3 acciones</small>
           </div>
 
           <!-- Llegada Escalonada: Dosis / Día -->
@@ -263,7 +360,7 @@
               <input type="range" id="rangeDailyDoses" min="50" max="4000" step="50" value="800" />
               <input type="number" id="inputDailyDoses" value="800" min="0" max="20000" step="50" required />
             </div>
-            <small class="field-help">Dosis que ingresan por día a cadena de frío</small>
+            <small class="field-help">Ingreso diario a cadena de frío cantonal</small>
           </div>
 
           <!-- Llegada Escalonada: Brigadas / Día -->
@@ -276,20 +373,20 @@
               <input type="range" id="rangeDailyBrigades" min="0" max="8" step="1" value="2" />
               <input type="number" id="inputDailyBrigades" value="2" min="0" max="20" step="1" required />
             </div>
-            <small class="field-help">Operativos diarios máx. de fumigación o cierre</small>
+            <small class="field-help">Despliegues diarios máx. de fumigación o cerco</small>
           </div>
         </div>
 
-        <!-- Tarjetas de Intervenciones Combinadas con Costos -->
-        <div class="interventions-row" aria-label="Intervenciones combinadas y costos unitarios">
+        <!-- Tres Acciones Combinadas con Costo Real -->
+        <div class="interventions-row" aria-label="Intervenciones combinadas con costos reales">
           <label class="intervention-card" for="chkUseVaccines">
             <input type="checkbox" id="chkUseVaccines" checked />
             <div class="int-body">
               <div class="int-top">
-                <span class="int-title">💉 Vacunación Focalizada</span>
+                <span class="int-title">💉 Vacunación Preventiva</span>
                 <span class="int-cost">$15 / dosis</span>
               </div>
-              <p class="int-desc">Inmuniza exclusivamente a población 🟢 Sana según la efectividad configurada.</p>
+              <p class="int-desc">Solo aplicable a población 🟢 Sana; prioriza anillo perimetral alrededor del foco.</p>
               <div class="int-stat" id="statShieldVaccines">Escudo: — dosis ($0)</div>
             </div>
           </label>
@@ -298,10 +395,10 @@
             <input type="checkbox" id="chkUseFumigation" checked />
             <div class="int-body">
               <div class="int-top">
-                <span class="int-title">🌫️ Brigada de Fumigación</span>
+                <span class="int-title">🌫️ Brigada de Fumigación / Control Vectorial</span>
                 <span class="int-cost">$1,200 / barrio</span>
               </div>
-              <p class="int-desc">Reduce el contagio local un <strong>40% durante 5 días</strong> en barrios con brote activo.</p>
+              <p class="int-desc">Reduce la tasa de transmisión local un <strong>40% durante 5 días</strong> en focos activos.</p>
               <div class="int-stat" id="statShieldFumigation">Escudo: — brigadas ($0)</div>
             </div>
           </label>
@@ -310,11 +407,11 @@
             <input type="checkbox" id="chkUseClosure" checked />
             <div class="int-body">
               <div class="int-top">
-                <span class="int-title">🚧 Cierre Selectivo de Nodo</span>
+                <span class="int-title">🚧 Cerco Sanitario / Cuarentena Selectiva</span>
                 <span class="int-cost">$3,500 / barrio</span>
               </div>
-              <p class="int-desc">Cordón sanitario vial que <strong>reduce un 75% el flujo</strong> entre barrios vecinos.</p>
-              <div class="int-stat" id="statShieldClosure">Escudo: — cierres ($0)</div>
+              <p class="int-desc">Reduce un <strong>75% el flujo de contagio</strong> desde y hacia barrios vecinos conectados.</p>
+              <div class="int-stat" id="statShieldClosure">Escudo: — cercos ($0)</div>
             </div>
           </label>
         </div>
@@ -324,14 +421,14 @@
     <!-- LEYENDA DE ESTADOS SEIR Y FÓRMULA TÁCTICA -->
     <section class="seir-strip" aria-label="Estados del modelo SEIR y regla de negocio">
       <div class="seir-badges">
-        <span class="seir-chip chip-s">🟢 <strong>Sano (S)</strong> · Único vacunable</span>
-        <span class="seir-chip chip-e">🟡 <strong>Mordido (E)</strong> · Incubando (No vacunable)</span>
-        <span class="seir-chip chip-i">🔴 <strong>Zombie (I)</strong> · Infeccioso (No vacunable)</span>
-        <span class="seir-chip chip-r">🔵 <strong>Exorcizado / Inmune (R)</strong> · Protegido (No re-vacunable)</span>
+        <span class="seir-chip chip-s" id="chipLabelS">🟢 <strong>Sano (S)</strong> · Único vacunable</span>
+        <span class="seir-chip chip-e" id="chipLabelE">🟡 <strong>Mordido (E)</strong> · Incubando (No vacunable)</span>
+        <span class="seir-chip chip-i" id="chipLabelI">🔴 <strong>Zombie (I)</strong> · Infeccioso (No vacunable)</span>
+        <span class="seir-chip chip-r" id="chipLabelR">🔵 <strong>Exorcizado / Inmune (R)</strong> · Protegido</span>
       </div>
       <div class="formula-box">
-        <span class="formula-label">Prioridad Diaria Escudo:</span>
-        <code>Puntaje = Conexiones &times; Zombies_Vecinos &times; (Sanos_Locales / Pob_Local)</code>
+        <span class="formula-label">Escudo + Anillo Perimetral:</span>
+        <code>Puntaje = Conexiones &times; Infectados_Vecinos &times; (S_i / N_i) &times; &psi;_anillo</code>
       </div>
     </section>
 
@@ -344,7 +441,7 @@
           <span class="vaccine-pill">$0 invertidos</span>
         </div>
         <h3>Sin Intervención</h3>
-        <p class="strategy-desc">Propagación libre de la plaga zombie sin vacunas, fumigación ni cierres viales.</p>
+        <p class="strategy-desc">Evolución natural del brote en Manta sin vacunación, control vectorial ni cercos sanitarios.</p>
 
         <div class="metric-block">
           <span class="metric-label">Personas Salvadas (vs. Sin Intervención)</span>
@@ -368,7 +465,7 @@
           <span class="vaccine-pill" id="kpiRandomVacPill">Solo 🟢 Sanos</span>
         </div>
         <h3>Intervención al Azar</h3>
-        <p class="strategy-desc">Asigna recursos sin priorizar red vial y vacuna al azar únicamente a población 🟢 Sana.</p>
+        <p class="strategy-desc">Reparte el mismo presupuesto sin inteligencia de grafo ni anillo perimetral, vacunando solo a 🟢 Sanos.</p>
 
         <div class="metric-block">
           <span class="metric-label">Personas Salvadas (Promedio)</span>
@@ -385,14 +482,14 @@
         <div class="kpi-footer" id="kpiRandomFooter">Inversión: —</div>
       </article>
 
-      <!-- Estrategia 3: Nuestra Estrategia -->
+      <!-- Estrategia 3: Nuestra Estrategia Mejorada -->
       <article class="kpi-card card-shield">
         <div class="kpi-card-header">
           <span class="strategy-tag tag-emerald">★ Nuestra Estrategia</span>
           <span class="vaccine-pill pill-emerald" id="kpiShieldDeltaBadge">+0 vs. Azar</span>
         </div>
-        <h3>Escudo de Centralidad y Riesgo</h3>
-        <p class="strategy-desc">Combina cierres de cuellos de botella, fumigación en focos y vacunación priorizada en 🟢 Sanos.</p>
+        <h3>Escudo de Centralidad + Cerco Perimetral Adaptativo</h3>
+        <p class="strategy-desc">Sella y fumiga el foco activo sin desperdiciar vacunas dentro del origen expuesto, creando un anillo en barrios vecinos.</p>
 
         <div class="metric-block">
           <span class="metric-label">Personas Salvadas (Promedio)</span>
@@ -418,7 +515,7 @@
           <div>
             <span class="badge badge-outline">DESPACHO DE ALCALDÍA · COE CANTONAL MANTA</span>
             <h2 id="mayorReportTitle">Informe Ejecutivo Automático para el Alcalde de Manta</h2>
-            <p class="panel-desc">Síntesis estratégica libre de tecnicismos generada dinámicamente según los parámetros actuales.</p>
+            <p class="panel-desc">Hoja de ruta operativa libre de tecnicismos actualizada dinámicamente por el motor y el Auto-Optimizador.</p>
           </div>
         </div>
         <button type="button" id="btnCopyMayorReport" class="btn btn-ghost btn-sm">
@@ -431,71 +528,91 @@
       </div>
     </section>
 
-    <!-- MAPA INTERACTIVO Y ANIMADO DE LA RED DE MANTA + TABLA DE AUDITORÍA -->
+    <!-- MAPA GEOESPACIAL REAL (LEAFLET GPS) + GRAFO TOPOLÓGICO + AUDITORÍA POR BARRIO -->
     <section class="map-and-table-grid">
-      <!-- Mapa SVG Interactivo y Animado -->
       <div class="panel map-panel">
         <div class="panel-header map-header">
           <div>
-            <h2>🗺️ Mapa Interactivo y Animado de la Red de Manta</h2>
-            <p class="panel-desc">Animación diaria de Día 1 a Día <span id="mapDescMaxDay">60</span> sobre los 8 barrios y 13 aristas viales.</p>
+            <h2>🛰️ Gemelo Geoespacial y Topológico de Manta</h2>
+            <p class="panel-desc">Ondas de calor, corredores viales y popups SEIR sincronizados del Día 0 al Día <span id="mapDescMaxDay">60</span>.</p>
           </div>
-          <div class="map-strategy-group">
+
+          <div class="map-header-controls">
+            <div class="segmented-tabs map-view-tabs" role="tablist" aria-label="Selector de vista del mapa">
+              <button type="button" id="btnViewGeo" class="seg-btn active" data-map-view="geo" role="tab" aria-selected="true">
+                🛰️ Mapa Geoespacial Real (GPS Manta)
+              </button>
+              <button type="button" id="btnViewTopo" class="seg-btn" data-map-view="topo" role="tab" aria-selected="false">
+                🕸️ Grafo Topológico de Red
+              </button>
+            </div>
+
             <label for="selectMapStrategy" class="sr-only">Estrategia en el mapa</label>
             <select id="selectMapStrategy" class="compact-select">
-              <option value="shield" selected>Ver: Escudo de Centralidad</option>
+              <option value="shield" selected>Ver: Escudo + Cerco Perimetral</option>
               <option value="random">Ver: Intervención al Azar</option>
               <option value="none">Ver: Sin Intervención</option>
             </select>
           </div>
         </div>
 
-        <!-- Controles Play/Pausa + Barra de Progreso Día 1 a Día 60 -->
+        <!-- Controles Reproducir/Pausa + Barra de Progreso Día 0 a Día 60 -->
         <div class="timeline-box">
           <div class="timeline-controls">
             <div class="play-btn-group">
-              <button type="button" id="btnPlayTimeline" class="btn btn-primary btn-sm">▶ Play</button>
-              <button type="button" id="btnResetTimeline" class="btn btn-secondary btn-sm" title="Volver al Día 1">⏮ Día 1</button>
+              <button type="button" id="btnPlayTimeline" class="btn btn-primary btn-sm">▶ Reproducir</button>
+              <button type="button" id="btnResetTimeline" class="btn btn-secondary btn-sm" title="Volver al Día 0">⏮ Día 0</button>
               <select id="selectPlaySpeed" class="speed-select" aria-label="Velocidad de animación">
-                <option value="180">1x Normal</option>
-                <option value="85">2x Rápido</option>
-                <option value="320">0.5x Detalle</option>
+                <option value="170">1x Normal</option>
+                <option value="80">2x Rápido</option>
+                <option value="310">0.5x Detalle</option>
               </select>
             </div>
 
             <span class="day-indicator">
-              Día <strong id="timelineDayLabel">1</strong> / <span id="timelineMaxDayLabel">60</span>
+              Día <strong id="timelineDayLabel">60</strong> / <span id="timelineMaxDayLabel">60</span>
             </span>
 
-            <input type="range" id="timelineSlider" min="1" max="60" step="1" value="1" aria-label="Barra de progreso de Día 1 a Día 60" />
+            <input type="range" id="timelineSlider" min="0" max="60" step="1" value="60" aria-label="Barra de progreso de Día 0 a Día 60" />
           </div>
 
           <div class="progress-track" aria-hidden="true">
-            <div id="timelineProgressFill" class="progress-fill" style="width: 0%;"></div>
+            <div id="timelineProgressFill" class="progress-fill" style="width: 100%;"></div>
           </div>
 
           <!-- Conteo animado en vivo de toda Manta en el día actual -->
           <div class="city-live-counters" aria-live="off">
             <div class="live-counter lc-s">
-              <span>🟢 Sanos</span>
+              <span id="liveLabelS">🟢 Sanos</span>
               <strong id="cityLiveS">0</strong>
             </div>
             <div class="live-counter lc-e">
-              <span>🟡 Mordidos</span>
+              <span id="liveLabelE">🟡 Mordidos</span>
               <strong id="cityLiveE">0</strong>
             </div>
             <div class="live-counter lc-i">
-              <span>🔴 Zombies</span>
+              <span id="liveLabelI">🔴 Zombies</span>
               <strong id="cityLiveI">0</strong>
             </div>
             <div class="live-counter lc-r">
-              <span>🔵 Exorcizados/Inm.</span>
+              <span id="liveLabelR">🔵 Exorcizados/Inm.</span>
               <strong id="cityLiveR">0</strong>
             </div>
           </div>
         </div>
 
-        <div class="svg-map-wrapper">
+        <!-- VISTA 1: MAPA GEOESPACIAL REAL CON LEAFLET + CARTODB DARK MATTER -->
+        <div id="geoMapContainer" class="geo-map-wrapper">
+          <div id="mantaGeoMap" class="manta-leaflet-canvas" role="region" aria-label="Mapa geoespacial GPS real de los 8 nodos de Manta"></div>
+          <div class="geo-map-overlay-legend">
+            <span>🔴 Onda Calor: Infectados</span>
+            <span>🚧 Línea Punteada: Cerco (-75%)</span>
+            <span>🟢 Línea Esmeralda: Anillo Protegido</span>
+          </div>
+        </div>
+
+        <!-- VISTA 2: GRAFO TOPOLÓGICO VECTORIAL SVG -->
+        <div id="topoMapContainer" class="svg-map-wrapper hidden">
           <svg id="mantaGraphSvg" viewBox="0 0 820 475" role="img" aria-label="Grafo animado de los 8 barrios de Manta">
             <defs>
               <radialGradient id="oceanGrad" cx="35%" cy="15%" r="75%">
@@ -504,7 +621,6 @@
               </radialGradient>
             </defs>
 
-            <!-- Silueta costera de la Bahía de Manta -->
             <path
               class="coast-water"
               d="M 0,0 L 820,0 L 820,165 C 745,175 685,155 615,150 C 540,145 485,125 420,108 C 345,88 280,82 215,118 C 145,156 80,210 0,245 Z"
@@ -516,15 +632,13 @@
             />
             <text x="28" y="38" class="map-ocean-label">OCÉANO PACÍFICO · BAHÍA DE MANTA</text>
 
-            <!-- Leyenda rápida de iconos tácticos en el mapa -->
-            <g transform="translate(525, 24)">
-              <rect x="0" y="0" width="275" height="28" rx="6" fill="rgba(6,10,19,0.78)" stroke="rgba(148,163,184,0.22)" />
+            <g transform="translate(510, 24)">
+              <rect x="0" y="0" width="290" height="28" rx="6" fill="rgba(6,10,19,0.78)" stroke="rgba(148,163,184,0.22)" />
               <text x="12" y="18" fill="#cbd5e1" font-family="Inter, sans-serif" font-size="10.5">
-                🚧 Cierre (-75% flujo) &nbsp;·&nbsp; 🌫️ Fumigación (-40% local)
+                🚧 Cerco (-75% flujo) &nbsp;·&nbsp; 🌫️ Fumigación (-40% local)
               </text>
             </g>
 
-            <!-- Capas dinámicas renderizadas desde app.js -->
             <g id="svgEdgesLayer"></g>
             <g id="svgNodesLayer"></g>
           </svg>
@@ -542,10 +656,10 @@
             </button>
           </div>
           <div class="inspector-seir-bars">
-            <div class="insp-stat"><span class="dot-s">🟢 Sanos</span> <strong id="inspS">0</strong></div>
-            <div class="insp-stat"><span class="dot-e">🟡 Mordidos</span> <strong id="inspE">0</strong></div>
-            <div class="insp-stat"><span class="dot-i">🔴 Zombies</span> <strong id="inspI">0</strong></div>
-            <div class="insp-stat"><span class="dot-r">🔵 Exorcizados</span> <strong id="inspR">0</strong></div>
+            <div class="insp-stat"><span class="dot-s" id="inspLabelS">🟢 Sanos</span> <strong id="inspS">0</strong></div>
+            <div class="insp-stat"><span class="dot-e" id="inspLabelE">🟡 Mordidos</span> <strong id="inspE">0</strong></div>
+            <div class="insp-stat"><span class="dot-i" id="inspLabelI">🔴 Zombies</span> <strong id="inspI">0</strong></div>
+            <div class="insp-stat"><span class="dot-r" id="inspLabelR">🔵 Exorcizados</span> <strong id="inspR">0</strong></div>
             <div class="insp-stat"><span class="dot-v">💉 Dosis / Estado</span> <strong id="inspVac">0</strong></div>
             <div class="insp-stat"><span class="dot-p">🎯 Puntaje Escudo</span> <strong id="inspScore">0.0</strong></div>
           </div>
@@ -557,7 +671,7 @@
         <div class="panel-header">
           <div>
             <h2>📊 Auditoría por Barrio e Intervenciones</h2>
-            <p class="panel-desc">Promedio de las corridas al cierre (Día <span id="tableFinalDay">60</span>) bajo <strong>Escudo de Centralidad</strong> vs. líneas base.</p>
+            <p class="panel-desc">Promedio de las corridas al cierre (Día <span id="tableFinalDay">60</span>) bajo <strong>Escudo + Cerco Perimetral</strong> vs. líneas base.</p>
           </div>
         </div>
 
@@ -569,10 +683,10 @@
                 <th class="num">Pob.</th>
                 <th class="num" title="Conexiones viales">Conex.</th>
                 <th class="num" title="Dosis aplicadas exclusivamente a 🟢 Sanos">Dosis (🟢 S)</th>
-                <th class="num" title="Intervenciones operativas en el barrio (Fumigaciones / Cierre)">Operativos</th>
+                <th class="num" title="Operativos de Fumigación / Cerco Sanitario">Operativos</th>
                 <th class="num" title="Infectados acumulados sin intervención">Inf. Base 1</th>
                 <th class="num" title="Infectados acumulados con estrategia al azar">Inf. Azar</th>
-                <th class="num" title="Infectados acumulados con Escudo">Inf. Escudo</th>
+                <th class="num" title="Infectados acumulados con Escudo Perimetral">Inf. Escudo</th>
                 <th class="num" title="Vidas salvadas por el Escudo en este barrio">Salvados</th>
               </tr>
             </thead>
@@ -595,7 +709,6 @@
 
     <!-- GRÁFICAS PRINCIPALES (CHART.JS) -->
     <section class="charts-layout">
-      <!-- Gráfica Principal: Comparación Diaria de las 3 Estrategias -->
       <div class="panel chart-panel-main">
         <div class="panel-header chart-header">
           <div>
@@ -606,8 +719,8 @@
             <button type="button" class="seg-btn active" data-chart-metric="cumInfected" role="tab" aria-selected="true">
               Infectados Acumulados
             </button>
-            <button type="button" class="seg-btn" data-chart-metric="activeZombies" role="tab" aria-selected="false">
-              🔴 Zombies Activos I(t)
+            <button type="button" class="seg-btn" data-chart-metric="activeZombies" role="tab" aria-selected="false" id="tabActiveMetric">
+              🔴 Activos I(t)
             </button>
             <button type="button" class="seg-btn" data-chart-metric="protectedPop" role="tab" aria-selected="false">
               🟢+🔵 Población a Salvo
@@ -619,15 +732,14 @@
         </div>
       </div>
 
-      <!-- Gráfica Secundaria: Dinámica SEIR Completa -->
       <div class="panel chart-panel-seir">
         <div class="panel-header chart-header">
           <div>
             <h2>🧬 Evolución Diaria de Estados SEIR</h2>
-            <p class="panel-desc">Conteo promedio diario de 🟢 Sanos, 🟡 Mordidos, 🔴 Zombies y 🔵 Exorcizados/Inmunes.</p>
+            <p class="panel-desc">Dinámica diaria promedio de los 4 compartimentos epidemiológicos en Manta.</p>
           </div>
           <select id="selectSeirStrategy" class="compact-select" aria-label="Estrategia para desglose SEIR">
-            <option value="shield" selected>Escudo de Centralidad y Riesgo</option>
+            <option value="shield" selected>Escudo + Cerco Perimetral</option>
             <option value="random">Intervención al Azar</option>
             <option value="none">Sin Intervención</option>
           </select>
@@ -637,11 +749,111 @@
         </div>
       </div>
     </section>
+
+    <!-- HISTORIAL DE AUDITORÍA INMUTABLE EN AMAZON DYNAMODB -->
+    <section class="panel dynamo-panel" aria-labelledby="dynamoTitle">
+      <div class="panel-header">
+        <div>
+          <div class="cloud-title-group">
+            <h2 id="dynamoTitle">🛡️ Historial de Auditoría Inmutable en Amazon DynamoDB</h2>
+            <span class="badge badge-outline" id="dynamoStorageBadge">Tabla: SpookyThonSimulations</span>
+          </div>
+          <p class="panel-desc">
+            Registro trazable de corridas Monte Carlo con semilla, modo epidemiológico, presupuesto ejecutado y firma criptográfica/determinista <code>HashFirma</code>.
+          </p>
+        </div>
+        <button type="button" id="btnRefreshDynamo" class="btn btn-secondary btn-sm">
+          🔄 Actualizar Historial
+        </button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="tactical-table dynamo-table">
+          <thead>
+            <tr>
+              <th>SimulationId</th>
+              <th>Timestamp (UTC)</th>
+              <th class="num">Seed</th>
+              <th>Modo</th>
+              <th class="num">Corridas</th>
+              <th class="num">Vidas Salvadas (Prom.)</th>
+              <th class="num">Presupuesto Usado</th>
+              <th>HashFirma (FNV-1a)</th>
+            </tr>
+          </thead>
+          <tbody id="dynamoAuditBody">
+            <tr>
+              <td colspan="8" class="empty-row">Sincronizando registros de auditoría...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PANEL DESPLEGABLE: SUSTENTO MATEMÁTICO Y ORIGEN DE LOS DATOS (INEC / MSP) -->
+    <details class="panel scientific-drawer" id="scientificDrawer">
+      <summary class="scientific-summary">
+        <div class="sci-summary-left">
+          <span class="sci-icon">📖</span>
+          <div>
+            <strong>Sustento Matemático y Origen de los Datos (INEC / MSP)</strong>
+            <span class="sci-sub">Haz clic para desplegar las ecuaciones SEIR en red, calibración térmica Open-Meteo y fuentes oficiales para el Jurado</span>
+          </div>
+        </div>
+        <span class="sci-chevron">▾</span>
+      </summary>
+
+      <div class="scientific-content">
+        <div class="sci-grid">
+          <article class="sci-card">
+            <h3>1. Modelo SEIR Metapoblacional Estocástico sobre Red Urbana</h3>
+            <p>
+              Manta se modela como un grafo no dirigido ponderado <code>G = (V, E)</code> con <code>|V| = 8</code> polos barriales (100,000 hab. de cohorte urbana representativa basada en el <strong>Censo INEC CPV 2022</strong>, cantón Manta: 271,145 hab.) y <code>|E| = 13</code> corredores viales reales. En cada día discreto <code>t</code> y barrio <code>i</code>, la fuerza de infección <code>&lambda;<sub>i,t</sub></code> combina contagio interno y movilidad vecina:
+            </p>
+            <pre class="sci-formula">&lambda;<sub>i,t</sub> = &eta;<sub>i,t</sub> &middot; [ m<sub>fum,i</sub> &middot; &beta; &middot; (I<sub>i,t</sub> / N<sub>i</sub>) + &Sigma;<sub>j&isin;N(i)</sub> m<sub>cerco,ij</sub> &middot; C<sub>ij</sub> &middot; &beta; &middot; (I<sub>j,t</sub> / N<sub>j</sub>) ]
+P(Exposición<sub>i,t</sub>) = 1 - exp(-&lambda;<sub>i,t</sub>)   |   &Delta;E<sub>i</sub> ~ Binomial(S<sub>i</sub>, P),  &Delta;I<sub>i</sub> ~ Binomial(E<sub>i</sub>, &sigma;),  &Delta;R<sub>i</sub> ~ Binomial(I<sub>i</sub>, &gamma;)</pre>
+            <p>
+              Donde <code>m<sub>fum,i</sub> = 0.60</code> bajo fumigación activa (<code>-40%</code> por 5 días) y <code>m<sub>cerco,ij</sub> = 0.25</code> por cada nodo con cerco sanitario activo en la arista (<code>-75%</code> de flujo).
+            </p>
+          </article>
+
+          <article class="sci-card">
+            <h3>2. Calibración Climática en Tiempo Real (Open-Meteo + Curva de Brière)</h3>
+            <p>
+              Para el modo <strong>Epidemia de Dengue (MSP Zona 4 - Manabí)</strong> y calibración ambiental en vivo en las coordenadas de Manta (<code>-0.9677, -80.7089</code>), la tasa de transmisión se ajusta mediante la respuesta térmica entomológica de <em>Aedes aegypti</em> (Brière / Mordecai et al., óptimo entre <code>27.5°C</code> y <code>29.2°C</code>):
+            </p>
+            <pre class="sci-formula">B(T) = T &middot; (T - 13.5) &middot; &radic;(39.0 - T)
+&beta;<sub>calibrado</sub> = &beta;<sub>base</sub> &middot; [B(T) / B(26.5)] &middot; [1 + 0.0045&middot;(RH - 76)] &middot; [1 + min(0.28, 0.035&middot;P)]</pre>
+            <p>
+              Parámetros clínicos MSP: incubación efectiva <code>1/&sigma; = 5 días</code>, viremia infecciosa media <code>1/&gamma; = 6 días</code> (<code>&gamma; = 0.1667</code>), eficacia de referencia tetravalente <code>80%</code> e Índices de Breteau barriales diferenciados (mayores en <em>Los Esteros</em> y <em>Mercado de Tarqui</em>).
+            </p>
+          </article>
+
+          <article class="sci-card">
+            <h3>3. Escudo de Centralidad + Cerco Perimetral Adaptativo</h3>
+            <p>
+              Cuando un brote nace dentro de un hub altamente conectado (ej. <em>Mercado de Tarqui</em>, grado 4) o la efectividad vacunal cae por variantes resistentes, vacunar masivamente dentro del foco ya expuesto desperdicia dosis en individuos que están por recibir exposición inmediata. Nuestro algoritmo aplica:
+            </p>
+            <pre class="sci-formula">Puntaje<sub>i</sub>(t) = Grado<sub>i</sub> &middot; (&Sigma;<sub>j&isin;N(i)</sub> I<sub>j,t</sub>) &middot; (S<sub>elig,i</sub> / N<sub>i</sub>) &middot; &psi;<sub>anillo,i</sub></pre>
+            <p>
+              Con <code>&psi;<sub>anillo</sub> = 0.18</code> sobre el foco expuesto (donde en su lugar se despliega <strong>Cerco Sanitario $3,500</strong> + <strong>Fumigación $1,200</strong>) y <code>&psi;<sub>anillo</sub> = 2.35</code> sobre los barrios vecinos aún sanos, levantando un cortafuegos perimetral antes de que la onda infecciosa cruce las avenidas.
+            </p>
+          </article>
+
+          <article class="sci-card">
+            <h3>4. Invariancia Determinista bajo Fan-Out Serverless (&times;5 Workers)</h3>
+            <p>
+              La semilla maestra (defecto <code>2026</code>) deriva determinísticamente las <code>N</code> sub-semillas con <code>mulberry32</code>. Al ejecutar entre <code>50</code> y <code>500</code> corridas en AWS, el cliente divide el vector de sub-semillas en <strong>5 particiones contiguas</strong> enviadas en paralelo vía <code>Promise.all</code>. Al consolidar las particiones en orden estricto <code>0..N-1</code>, las sumas exactas y el hash <strong>FNV-1a de 32 bits</strong> coinciden bit a bit con una ejecución secuencial.
+            </p>
+          </article>
+        </div>
+      </div>
+    </details>
   </main>
 
   <footer class="footer">
-    <span>Operación Contención Manta · Nivel Pro (Track B - La Plaga Zombie) · Determinismo <code>mulberry32(seed)</code></span>
-    <span>Población: 100,000 hab. · Vacuna $15 · Fumigación $1,200 (-40% / 5d) · Cierre $3,500 (-75% flujo)</span>
+    <span>Operación Contención Manta · Arquitectura Multicapa AWS (Lambda Fan-Out &times;5 + S3 KMS + DynamoDB + Open-Meteo) · <code>mulberry32(seed)</code></span>
+    <span>INEC / MSP Manta · Vacuna $15 (Solo 🟢 Sanos) · Fumigación $1,200 (-40% / 5d) · Cerco $3,500 (-75% flujo)</span>
   </footer>
 
   <script src="./app.js"></script>
