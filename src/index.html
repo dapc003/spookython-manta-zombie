@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Operación Contención Manta · Track B: La Plaga Zombie (Simulador SEIR)</title>
+  <title>Operación Contención Manta · Nivel Pro (Track B: La Plaga Zombie)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" />
@@ -22,11 +22,12 @@
         <div>
           <div class="eyebrow-row">
             <span class="badge badge-danger">TRACK B · LA PLAGA ZOMBIE</span>
-            <span class="badge badge-outline">COE CANTONAL MANTA · GRAFO 8 NODOS / 100,000 HAB.</span>
+            <span class="badge badge-pro">NIVEL PRO · ANTI-BROTE SORPRESA</span>
+            <span class="badge badge-outline">MANTA · 8 NODOS / 100,000 HAB.</span>
           </div>
           <h1>Operación Contención Manta</h1>
           <p class="subtitle">
-            Simulador Epidemiológico SEIR Diario Estocástico, Determinista (<code>mulberry32</code>) y Monte Carlo
+            Simulador Epidemiológico SEIR Reproducible (<code>mulberry32</code>), Optimización Presupuestaria y Monte Carlo
           </p>
         </div>
       </div>
@@ -37,7 +38,7 @@
           <span>PRNG: <strong id="activeSeedBadge">mulberry32(2026)</strong></span>
         </div>
         <div class="telemetry-pill" title="Firma de verificación determinista de los resultados actuales">
-          <span>Hash Reproducible: <code id="determinismHash">0x--------</code></span>
+          <span>Hash: <code id="determinismHash">0x--------</code></span>
         </div>
         <div class="telemetry-pill pill-strict" title="Auditoría activa: 0 vacunas aplicadas a Mordidos (E), Zombies (I) o Exorcizados (R)">
           <span>🛡️ Regla Estricta: <strong id="strictAuditBadge">100% Solo 🟢 Sanos</strong></span>
@@ -47,132 +48,251 @@
   </header>
 
   <main class="dashboard-container">
-    <!-- PANEL DE CONTROL DE PARÁMETROS -->
-    <section class="panel controls-panel" aria-labelledby="controlsTitle">
-      <div class="panel-header">
-        <div>
-          <h2 id="controlsTitle">⚙️ Parámetros Tácticos y Epidemiológicos</h2>
-          <p class="panel-desc">Configura el brote y ejecuta <em>N</em> corridas Monte Carlo con sub-semillas deterministas.</p>
-        </div>
-        <div class="controls-actions-top">
-          <button type="button" id="btnVerifyDeterminism" class="btn btn-ghost btn-sm" title="Re-ejecuta con la misma semilla y comprueba que el hash de resultados sea idéntico bit a bit">
-            ✓ Verificar Reproducibilidad
-          </button>
-          <button type="button" id="btnResetDefaults" class="btn btn-secondary btn-sm">
-            ↺ Valores por Defecto
-          </button>
-        </div>
-      </div>
-
-      <form id="simForm" class="controls-grid" novalidate>
-        <!-- 1. Semilla -->
-        <div class="control-field">
-          <div class="label-row">
-            <label for="inputSeed">Semilla (<code>seed</code>)</label>
-            <span class="hint-tag">Determinista</span>
+    <!-- FORMULARIO UNIFICADO: PARÁMETROS BASE + PANEL ANTI-BROTE SORPRESA -->
+    <form id="simForm" class="sim-master-form" novalidate>
+      <!-- PANEL 1: PARÁMETROS EPIDEMIOLÓGICOS Y MONTE CARLO -->
+      <section class="panel controls-panel" aria-labelledby="controlsTitle">
+        <div class="panel-header">
+          <div>
+            <h2 id="controlsTitle">⚙️ Parámetros Base del Brote y Monte Carlo</h2>
+            <p class="panel-desc">Configura la semilla determinista, corridas estocásticas y biología base de la plaga.</p>
           </div>
-          <input type="number" id="inputSeed" name="seed" value="2026" step="1" min="0" max="2147483647" required />
-          <small class="field-help">Semilla maestra para <code>mulberry32(seed)</code></small>
+          <div class="controls-actions-top">
+            <button type="button" id="btnVerifyDeterminism" class="btn btn-ghost btn-sm" title="Re-ejecuta dos veces con la misma semilla y verifica igualdad exacta bit a bit">
+              ✓ Verificar Reproducibilidad
+            </button>
+            <button type="button" id="btnResetDefaults" class="btn btn-secondary btn-sm">
+              ↺ Restaurar Todo por Defecto
+            </button>
+          </div>
         </div>
 
-        <!-- 2. Corridas Monte Carlo -->
-        <div class="control-field">
-          <div class="label-row">
-            <label for="inputRuns">Corridas Monte Carlo (<em>N</em>)</label>
-            <output id="outRuns" for="rangeRuns" class="mono-val">50</output>
+        <div class="controls-grid">
+          <!-- 1. Semilla -->
+          <div class="control-field">
+            <div class="label-row">
+              <label for="inputSeed">Semilla (<code>seed</code>)</label>
+              <span class="hint-tag">Determinista</span>
+            </div>
+            <input type="number" id="inputSeed" name="seed" value="2026" step="1" min="0" max="2147483647" required />
+            <small class="field-help">Semilla maestra <code>mulberry32(seed)</code></small>
           </div>
-          <div class="dual-input">
-            <input type="range" id="rangeRuns" min="1" max="250" step="1" value="50" />
-            <input type="number" id="inputRuns" name="runs" value="50" min="1" max="500" step="1" required />
+
+          <!-- 2. Corridas Monte Carlo -->
+          <div class="control-field">
+            <div class="label-row">
+              <label for="inputRuns">Corridas Monte Carlo (<em>N</em>)</label>
+              <output id="outRuns" for="rangeRuns" class="mono-val">50</output>
+            </div>
+            <div class="dual-input">
+              <input type="range" id="rangeRuns" min="1" max="200" step="1" value="50" />
+              <input type="number" id="inputRuns" name="runs" value="50" min="1" max="500" step="1" required />
+            </div>
+            <small class="field-help">Sub-semillas derivadas de la principal</small>
           </div>
-          <small class="field-help">Sub-semillas derivadas secuencialmente</small>
+
+          <!-- 3. Días -->
+          <div class="control-field">
+            <div class="label-row">
+              <label for="inputDays">Horizonte (Días)</label>
+              <output id="outDays" for="rangeDays" class="mono-val">60 d</output>
+            </div>
+            <div class="dual-input">
+              <input type="range" id="rangeDays" min="15" max="150" step="1" value="60" />
+              <input type="number" id="inputDays" name="days" value="60" min="10" max="365" step="1" required />
+            </div>
+            <small class="field-help">Duración de la simulación diaria</small>
+          </div>
+
+          <!-- 4. Barrio Paciente Cero -->
+          <div class="control-field">
+            <div class="label-row">
+              <label for="selectPatientZero">Barrio Paciente Cero</label>
+              <span class="hint-tag">Origen ☣</span>
+            </div>
+            <select id="selectPatientZero" name="patientZero"></select>
+            <small class="field-help">Foco inicial del brote zombie</small>
+          </div>
+
+          <!-- 5. Tasa de Contagio (beta) -->
+          <div class="control-field">
+            <div class="label-row">
+              <label for="inputBeta">Tasa de Contagio (&beta;)</label>
+              <output id="outBeta" for="rangeBeta" class="mono-val">0.72</output>
+            </div>
+            <div class="dual-input">
+              <input type="range" id="rangeBeta" min="0.10" max="1.50" step="0.01" value="0.72" />
+              <input type="number" id="inputBeta" name="beta" value="0.72" min="0.05" max="2.50" step="0.01" required />
+            </div>
+            <small class="field-help">Velocidad de transmisión por contacto</small>
+          </div>
+
+          <!-- 6. Días de Incubación -->
+          <div class="control-field">
+            <div class="label-row">
+              <label for="inputIncubation">Días de Incubación</label>
+              <output id="outIncubation" for="rangeIncubation" class="mono-val">3 d</output>
+            </div>
+            <div class="dual-input">
+              <input type="range" id="rangeIncubation" min="1" max="14" step="1" value="3" />
+              <input type="number" id="inputIncubation" name="incubation" value="3" min="1" max="30" step="1" required />
+            </div>
+            <small class="field-help">Paso 🟡 Mordido &rarr; 🔴 Zombie</small>
+          </div>
+
+          <!-- 7. Total de Vacunas (Tope físico disponible) -->
+          <div class="control-field">
+            <div class="label-row">
+              <label for="inputVaccines">Stock Máx. de Vacunas</label>
+              <output id="outVaccines" for="rangeVaccines" class="mono-val">24,000</output>
+            </div>
+            <div class="dual-input">
+              <input type="range" id="rangeVaccines" min="0" max="100000" step="500" value="24000" />
+              <input type="number" id="inputVaccines" name="vaccines" value="24000" min="0" max="100000" step="100" required />
+            </div>
+            <small class="field-help">Tope físico regional (solo para 🟢 Sanos)</small>
+          </div>
+
+          <!-- Botón Ejecutar -->
+          <div class="control-field control-submit">
+            <button type="submit" id="btnRunSim" class="btn btn-primary btn-block">
+              ⚡ Ejecutar Operación Monte Carlo
+            </button>
+            <div class="exec-meta" id="execTimingInfo">Listo para simular</div>
+          </div>
         </div>
 
-        <!-- 3. Días -->
-        <div class="control-field">
-          <div class="label-row">
-            <label for="inputDays">Horizonte (Días)</label>
-            <output id="outDays" for="rangeDays" class="mono-val">60 d</output>
+        <div id="reproBanner" class="repro-banner hidden" role="status" aria-live="polite"></div>
+      </section>
+
+      <!-- PANEL 2: PANEL ANTI-BROTE SORPRESA DEL JURADO (NIVEL PRO) -->
+      <section class="panel surprise-panel" aria-labelledby="surpriseTitle">
+        <div class="panel-header">
+          <div>
+            <div class="surprise-title-row">
+              <h2 id="surpriseTitle">🚨 Panel Anti-Brote Sorpresa del Jurado (Nivel Pro)</h2>
+              <span class="badge badge-pro"> DEFENSA EN VIVO</span>
+            </div>
+            <p class="panel-desc">
+              Adapta en tiempo real la estrategia ante variantes resistentes, recortes presupuestarios, llegada escalonada e intervenciones combinadas.
+            </p>
           </div>
-          <div class="dual-input">
-            <input type="range" id="rangeDays" min="15" max="150" step="1" value="60" />
-            <input type="number" id="inputDays" name="days" value="60" min="10" max="365" step="1" required />
+
+          <div class="preset-pills" aria-label="Escenarios rápidos de prueba del jurado">
+            <span class="preset-label">Pruebas Rápidas:</span>
+            <button type="button" class="btn-preset" data-preset="standard">Estándar ($50k · 85%)</button>
+            <button type="button" class="btn-preset" data-preset="resistant">🧬 Variante Resistente (25% Efec.)</button>
+            <button type="button" class="btn-preset" data-preset="austerity">💸 Austeridad ($22k · Lento)</button>
+            <button type="button" class="btn-preset" data-preset="hyper">🔥 Hiperbrote (&beta;=1.05 · $75k)</button>
           </div>
-          <small class="field-help">Evolución diaria del modelo SEIR</small>
         </div>
 
-        <!-- 4. Barrio Paciente Cero -->
-        <div class="control-field">
-          <div class="label-row">
-            <label for="selectPatientZero">Barrio Paciente Cero</label>
-            <span class="hint-tag">Origen ☣</span>
+        <div class="surprise-controls-grid">
+          <!-- Efectividad de la Vacuna (%) -->
+          <div class="control-field field-pro">
+            <div class="label-row">
+              <label for="inputEfficacy">Efectividad de la Vacuna (%)</label>
+              <output id="outEfficacy" for="rangeEfficacy" class="mono-val text-amber">85%</output>
+            </div>
+            <div class="dual-input">
+              <input type="range" id="rangeEfficacy" min="10" max="100" step="1" value="85" />
+              <input type="number" id="inputEfficacy" value="85" min="10" max="100" step="1" required />
+            </div>
+            <small class="field-help">10%–100% (simula cepas parcialmente resistentes)</small>
           </div>
-          <select id="selectPatientZero" name="patientZero"></select>
-          <small class="field-help">Foco inicial de la infección zombie en Día 0</small>
+
+          <!-- Presupuesto Total ($) -->
+          <div class="control-field field-pro">
+            <div class="label-row">
+              <label for="inputBudget">Presupuesto Total ($)</label>
+              <output id="outBudget" for="rangeBudget" class="mono-val text-emerald">$50,000</output>
+            </div>
+            <div class="dual-input">
+              <input type="range" id="rangeBudget" min="0" max="300000" step="1000" value="50000" />
+              <input type="number" id="inputBudget" value="50000" min="0" max="2000000" step="500" required />
+            </div>
+            <small class="field-help">Techo financiero para vacunas, fumigación y cierres</small>
+          </div>
+
+          <!-- Llegada Escalonada: Dosis / Día -->
+          <div class="control-field field-pro">
+            <div class="label-row">
+              <label for="inputDailyDoses">Llegada Escalonada (Dosis/día)</label>
+              <output id="outDailyDoses" for="rangeDailyDoses" class="mono-val">800 /día</output>
+            </div>
+            <div class="dual-input">
+              <input type="range" id="rangeDailyDoses" min="50" max="4000" step="50" value="800" />
+              <input type="number" id="inputDailyDoses" value="800" min="0" max="20000" step="50" required />
+            </div>
+            <small class="field-help">Dosis que ingresan por día a cadena de frío</small>
+          </div>
+
+          <!-- Llegada Escalonada: Brigadas / Día -->
+          <div class="control-field field-pro">
+            <div class="label-row">
+              <label for="inputDailyBrigades">Capacidad Táctica (Brigadas/día)</label>
+              <output id="outDailyBrigades" for="rangeDailyBrigades" class="mono-val">2 /día</output>
+            </div>
+            <div class="dual-input">
+              <input type="range" id="rangeDailyBrigades" min="0" max="8" step="1" value="2" />
+              <input type="number" id="inputDailyBrigades" value="2" min="0" max="20" step="1" required />
+            </div>
+            <small class="field-help">Operativos diarios máx. de fumigación o cierre</small>
+          </div>
         </div>
 
-        <!-- 5. Tasa de Contagio (beta) -->
-        <div class="control-field">
-          <div class="label-row">
-            <label for="inputBeta">Tasa de Contagio (&beta;)</label>
-            <output id="outBeta" for="rangeBeta" class="mono-val">0.72</output>
-          </div>
-          <div class="dual-input">
-            <input type="range" id="rangeBeta" min="0.10" max="1.50" step="0.01" value="0.72" />
-            <input type="number" id="inputBeta" name="beta" value="0.72" min="0.05" max="2.50" step="0.01" required />
-          </div>
-          <small class="field-help">Velocidad de transmisión por contacto zombie</small>
-        </div>
+        <!-- Tarjetas de Intervenciones Combinadas con Costos -->
+        <div class="interventions-row" aria-label="Intervenciones combinadas y costos unitarios">
+          <label class="intervention-card" for="chkUseVaccines">
+            <input type="checkbox" id="chkUseVaccines" checked />
+            <div class="int-body">
+              <div class="int-top">
+                <span class="int-title">💉 Vacunación Focalizada</span>
+                <span class="int-cost">$15 / dosis</span>
+              </div>
+              <p class="int-desc">Inmuniza exclusivamente a población 🟢 Sana según la efectividad configurada.</p>
+              <div class="int-stat" id="statShieldVaccines">Escudo: — dosis ($0)</div>
+            </div>
+          </label>
 
-        <!-- 6. Días de Incubación -->
-        <div class="control-field">
-          <div class="label-row">
-            <label for="inputIncubation">Días de Incubación</label>
-            <output id="outIncubation" for="rangeIncubation" class="mono-val">3 d</output>
-          </div>
-          <div class="dual-input">
-            <input type="range" id="rangeIncubation" min="1" max="14" step="1" value="3" />
-            <input type="number" id="inputIncubation" name="incubation" value="3" min="1" max="30" step="1" required />
-          </div>
-          <small class="field-help">Transición 🟡 Mordido &rarr; 🔴 Zombie (&sigma; = 1/días)</small>
-        </div>
+          <label class="intervention-card" for="chkUseFumigation">
+            <input type="checkbox" id="chkUseFumigation" checked />
+            <div class="int-body">
+              <div class="int-top">
+                <span class="int-title">🌫️ Brigada de Fumigación</span>
+                <span class="int-cost">$1,200 / barrio</span>
+              </div>
+              <p class="int-desc">Reduce el contagio local un <strong>40% durante 5 días</strong> en barrios con brote activo.</p>
+              <div class="int-stat" id="statShieldFumigation">Escudo: — brigadas ($0)</div>
+            </div>
+          </label>
 
-        <!-- 7. Total de Vacunas -->
-        <div class="control-field">
-          <div class="label-row">
-            <label for="inputVaccines">Total de Vacunas</label>
-            <output id="outVaccines" for="rangeVaccines" class="mono-val">24,000</output>
-          </div>
-          <div class="dual-input">
-            <input type="range" id="rangeVaccines" min="0" max="100000" step="500" value="24000" />
-            <input type="number" id="inputVaccines" name="vaccines" value="24000" min="0" max="100000" step="100" required />
-          </div>
-          <small class="field-help">Reserva estratégica (solo aplicable a 🟢 Sanos)</small>
+          <label class="intervention-card" for="chkUseClosure">
+            <input type="checkbox" id="chkUseClosure" checked />
+            <div class="int-body">
+              <div class="int-top">
+                <span class="int-title">🚧 Cierre Selectivo de Nodo</span>
+                <span class="int-cost">$3,500 / barrio</span>
+              </div>
+              <p class="int-desc">Cordón sanitario vial que <strong>reduce un 75% el flujo</strong> entre barrios vecinos.</p>
+              <div class="int-stat" id="statShieldClosure">Escudo: — cierres ($0)</div>
+            </div>
+          </label>
         </div>
-
-        <!-- Botón Ejecutar -->
-        <div class="control-field control-submit">
-          <button type="submit" id="btnRunSim" class="btn btn-primary btn-block">
-            ⚡ Ejecutar Monte Carlo
-          </button>
-          <div class="exec-meta" id="execTimingInfo">Listo para simular</div>
-        </div>
-      </form>
-
-      <div id="reproBanner" class="repro-banner hidden" role="status" aria-live="polite"></div>
-    </section>
+      </section>
+    </form>
 
     <!-- LEYENDA DE ESTADOS SEIR Y FÓRMULA TÁCTICA -->
     <section class="seir-strip" aria-label="Estados del modelo SEIR y regla de negocio">
       <div class="seir-badges">
-        <span class="seir-chip chip-s">🟢 <strong>Sano (S)</strong> · Susceptible (Único vacunable)</span>
-        <span class="seir-chip chip-e">🟡 <strong>Mordido / Expuesto (E)</strong> · En incubación (Prohibido vacunar)</span>
-        <span class="seir-chip chip-i">🔴 <strong>Zombie / Infeccioso (I)</strong> · Vector activo (Prohibido vacunar)</span>
-        <span class="seir-chip chip-r">🔵 <strong>Exorcizado / Inmune (R)</strong> · Neutralizado o Vacunado (Prohibido re-vacunar)</span>
+        <span class="seir-chip chip-s">🟢 <strong>Sano (S)</strong> · Único vacunable</span>
+        <span class="seir-chip chip-e">🟡 <strong>Mordido (E)</strong> · Incubando (No vacunable)</span>
+        <span class="seir-chip chip-i">🔴 <strong>Zombie (I)</strong> · Infeccioso (No vacunable)</span>
+        <span class="seir-chip chip-r">🔵 <strong>Exorcizado / Inmune (R)</strong> · Protegido (No re-vacunable)</span>
       </div>
       <div class="formula-box">
-        <span class="formula-label">Fórmula Diaria Nuestro Escudo:</span>
-        <code>Puntaje(barrio) = Conexiones &times; Zombies_Vecinos &times; (Sanos_Locales / Población_Local)</code>
+        <span class="formula-label">Prioridad Diaria Escudo:</span>
+        <code>Puntaje = Conexiones &times; Zombies_Vecinos &times; (Sanos_Locales / Pob_Local)</code>
       </div>
     </section>
 
@@ -182,10 +302,10 @@
       <article class="kpi-card card-baseline1">
         <div class="kpi-card-header">
           <span class="strategy-tag tag-red">Línea Base 1</span>
-          <span class="vaccine-pill">0 dosis</span>
+          <span class="vaccine-pill">$0 invertidos</span>
         </div>
         <h3>Sin Intervención</h3>
-        <p class="strategy-desc">Propagación libre de la plaga por las arterias de Manta con 0 vacunas aplicadas.</p>
+        <p class="strategy-desc">Propagación libre de la plaga zombie sin vacunas, fumigación ni cierres viales.</p>
 
         <div class="metric-block">
           <span class="metric-label">Personas Salvadas (vs. Sin Intervención)</span>
@@ -209,7 +329,7 @@
           <span class="vaccine-pill" id="kpiRandomVacPill">Solo 🟢 Sanos</span>
         </div>
         <h3>Intervención al Azar</h3>
-        <p class="strategy-desc">Reparte vacunas uniformemente al azar únicamente entre población 🟢 Sana de cualquier barrio.</p>
+        <p class="strategy-desc">Asigna recursos sin priorizar red vial y vacuna al azar únicamente a población 🟢 Sana.</p>
 
         <div class="metric-block">
           <span class="metric-label">Personas Salvadas (Promedio)</span>
@@ -223,7 +343,7 @@
           <div class="metric-range">Rango [Mín - Máx]: <strong id="kpiRandomInfRange">[—]</strong></div>
         </div>
 
-        <div class="kpi-footer" id="kpiRandomFooter">Vacunas aplicadas a 🟢 Sanos: —</div>
+        <div class="kpi-footer" id="kpiRandomFooter">Inversión: —</div>
       </article>
 
       <!-- Estrategia 3: Nuestra Estrategia -->
@@ -233,7 +353,7 @@
           <span class="vaccine-pill pill-emerald" id="kpiShieldDeltaBadge">+0 vs. Azar</span>
         </div>
         <h3>Escudo de Centralidad y Riesgo</h3>
-        <p class="strategy-desc">Prioriza diariamente los cuellos de botella según grado nodal, presión zombie vecina y fracción 🟢 Sana.</p>
+        <p class="strategy-desc">Combina cierres de cuellos de botella, fumigación en focos y vacunación priorizada en 🟢 Sanos.</p>
 
         <div class="metric-block">
           <span class="metric-label">Personas Salvadas (Promedio)</span>
@@ -247,8 +367,191 @@
           <div class="metric-range">Rango [Mín - Máx]: <strong id="kpiShieldInfRange">[—]</strong></div>
         </div>
 
-        <div class="kpi-footer" id="kpiShieldFooter">Vacunas aplicadas a 🟢 Sanos: —</div>
+        <div class="kpi-footer" id="kpiShieldFooter">Inversión: —</div>
       </article>
+    </section>
+
+    <!-- INFORME EJECUTIVO AUTOMÁTICO PARA EL ALCALDE DE MANTA -->
+    <section class="panel mayor-panel" aria-labelledby="mayorReportTitle">
+      <div class="panel-header mayor-header">
+        <div class="mayor-heading-group">
+          <div class="mayor-seal" aria-hidden="true">🏛️</div>
+          <div>
+            <span class="badge badge-outline">DESPACHO DE ALCALDÍA · COE CANTONAL MANTA</span>
+            <h2 id="mayorReportTitle">Informe Ejecutivo Automático para el Alcalde de Manta</h2>
+            <p class="panel-desc">Síntesis estratégica libre de tecnicismos generada dinámicamente según los parámetros actuales.</p>
+          </div>
+        </div>
+        <button type="button" id="btnCopyMayorReport" class="btn btn-ghost btn-sm">
+          📋 Copiar Informe Oficial
+        </button>
+      </div>
+
+      <div id="mayorReportContainer" class="mayor-report-grid">
+        <!-- Generado dinámicamente por app.js -->
+      </div>
+    </section>
+
+    <!-- MAPA INTERACTIVO Y ANIMADO DE LA RED DE MANTA + TABLA DE AUDITORÍA -->
+    <section class="map-and-table-grid">
+      <!-- Mapa SVG Interactivo y Animado -->
+      <div class="panel map-panel">
+        <div class="panel-header map-header">
+          <div>
+            <h2>🗺️ Mapa Interactivo y Animado de la Red de Manta</h2>
+            <p class="panel-desc">Animación diaria de Día 1 a Día <span id="mapDescMaxDay">60</span> sobre los 8 barrios y 13 aristas viales.</p>
+          </div>
+          <div class="map-strategy-group">
+            <label for="selectMapStrategy" class="sr-only">Estrategia en el mapa</label>
+            <select id="selectMapStrategy" class="compact-select">
+              <option value="shield" selected>Ver: Escudo de Centralidad</option>
+              <option value="random">Ver: Intervención al Azar</option>
+              <option value="none">Ver: Sin Intervención</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Controles Play/Pausa + Barra de Progreso Día 1 a Día 60 -->
+        <div class="timeline-box">
+          <div class="timeline-controls">
+            <div class="play-btn-group">
+              <button type="button" id="btnPlayTimeline" class="btn btn-primary btn-sm">▶ Play</button>
+              <button type="button" id="btnResetTimeline" class="btn btn-secondary btn-sm" title="Volver al Día 1">⏮ Día 1</button>
+              <select id="selectPlaySpeed" class="speed-select" aria-label="Velocidad de animación">
+                <option value="180">1x Normal</option>
+                <option value="85">2x Rápido</option>
+                <option value="320">0.5x Detalle</option>
+              </select>
+            </div>
+
+            <span class="day-indicator">
+              Día <strong id="timelineDayLabel">1</strong> / <span id="timelineMaxDayLabel">60</span>
+            </span>
+
+            <input type="range" id="timelineSlider" min="1" max="60" step="1" value="1" aria-label="Barra de progreso de Día 1 a Día 60" />
+          </div>
+
+          <div class="progress-track" aria-hidden="true">
+            <div id="timelineProgressFill" class="progress-fill" style="width: 0%;"></div>
+          </div>
+
+          <!-- Conteo animado en vivo de toda Manta en el día actual -->
+          <div class="city-live-counters" aria-live="off">
+            <div class="live-counter lc-s">
+              <span>🟢 Sanos</span>
+              <strong id="cityLiveS">0</strong>
+            </div>
+            <div class="live-counter lc-e">
+              <span>🟡 Mordidos</span>
+              <strong id="cityLiveE">0</strong>
+            </div>
+            <div class="live-counter lc-i">
+              <span>🔴 Zombies</span>
+              <strong id="cityLiveI">0</strong>
+            </div>
+            <div class="live-counter lc-r">
+              <span>🔵 Exorcizados/Inm.</span>
+              <strong id="cityLiveR">0</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="svg-map-wrapper">
+          <svg id="mantaGraphSvg" viewBox="0 0 820 475" role="img" aria-label="Grafo animado de los 8 barrios de Manta">
+            <defs>
+              <radialGradient id="oceanGrad" cx="35%" cy="15%" r="75%">
+                <stop offset="0%" stop-color="#0c2438" stop-opacity="0.72" />
+                <stop offset="100%" stop-color="#070d19" stop-opacity="0.15" />
+              </radialGradient>
+            </defs>
+
+            <!-- Silueta costera de la Bahía de Manta -->
+            <path
+              class="coast-water"
+              d="M 0,0 L 820,0 L 820,165 C 745,175 685,155 615,150 C 540,145 485,125 420,108 C 345,88 280,82 215,118 C 145,156 80,210 0,245 Z"
+              fill="url(#oceanGrad)"
+            />
+            <path
+              class="coast-line"
+              d="M 0,245 C 80,210 145,156 215,118 C 280,82 345,88 420,108 C 485,125 540,145 615,150 C 685,155 745,175 820,165"
+            />
+            <text x="28" y="38" class="map-ocean-label">OCÉANO PACÍFICO · BAHÍA DE MANTA</text>
+
+            <!-- Leyenda rápida de iconos tácticos en el mapa -->
+            <g transform="translate(525, 24)">
+              <rect x="0" y="0" width="275" height="28" rx="6" fill="rgba(6,10,19,0.78)" stroke="rgba(148,163,184,0.22)" />
+              <text x="12" y="18" fill="#cbd5e1" font-family="Inter, sans-serif" font-size="10.5">
+                🚧 Cierre (-75% flujo) &nbsp;·&nbsp; 🌫️ Fumigación (-40% local)
+              </text>
+            </g>
+
+            <!-- Capas dinámicas renderizadas desde app.js -->
+            <g id="svgEdgesLayer"></g>
+            <g id="svgNodesLayer"></g>
+          </svg>
+        </div>
+
+        <!-- Inspector del Barrio Seleccionado -->
+        <div class="node-inspector" id="nodeInspector">
+          <div class="inspector-top">
+            <div>
+              <h3 id="inspNodeName">Selecciona un barrio</h3>
+              <p id="inspNodeMeta" class="inspector-meta">—</p>
+            </div>
+            <button type="button" id="btnSetPatientZeroFromMap" class="btn btn-ghost btn-sm">
+              ☣ Fijar como Paciente Cero
+            </button>
+          </div>
+          <div class="inspector-seir-bars">
+            <div class="insp-stat"><span class="dot-s">🟢 Sanos</span> <strong id="inspS">0</strong></div>
+            <div class="insp-stat"><span class="dot-e">🟡 Mordidos</span> <strong id="inspE">0</strong></div>
+            <div class="insp-stat"><span class="dot-i">🔴 Zombies</span> <strong id="inspI">0</strong></div>
+            <div class="insp-stat"><span class="dot-r">🔵 Exorcizados</span> <strong id="inspR">0</strong></div>
+            <div class="insp-stat"><span class="dot-v">💉 Dosis / Estado</span> <strong id="inspVac">0</strong></div>
+            <div class="insp-stat"><span class="dot-p">🎯 Puntaje Escudo</span> <strong id="inspScore">0.0</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabla Comparativa por Barrio y Auditoría -->
+      <div class="panel table-panel">
+        <div class="panel-header">
+          <div>
+            <h2>📊 Auditoría por Barrio e Intervenciones</h2>
+            <p class="panel-desc">Promedio de las corridas al cierre (Día <span id="tableFinalDay">60</span>) bajo <strong>Escudo de Centralidad</strong> vs. líneas base.</p>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="tactical-table">
+            <thead>
+              <tr>
+                <th>Barrio de Manta</th>
+                <th class="num">Pob.</th>
+                <th class="num" title="Conexiones viales">Conex.</th>
+                <th class="num" title="Dosis aplicadas exclusivamente a 🟢 Sanos">Dosis (🟢 S)</th>
+                <th class="num" title="Intervenciones operativas en el barrio (Fumigaciones / Cierre)">Operativos</th>
+                <th class="num" title="Infectados acumulados sin intervención">Inf. Base 1</th>
+                <th class="num" title="Infectados acumulados con estrategia al azar">Inf. Azar</th>
+                <th class="num" title="Infectados acumulados con Escudo">Inf. Escudo</th>
+                <th class="num" title="Vidas salvadas por el Escudo en este barrio">Salvados</th>
+              </tr>
+            </thead>
+            <tbody id="barrioTableBody"></tbody>
+            <tfoot id="barrioTableFoot"></tfoot>
+          </table>
+        </div>
+
+        <div class="audit-callout">
+          <div class="audit-icon">🛡️</div>
+          <div>
+            <strong>Certificación de Regla Estricta, Presupuesto y Semilla:</strong>
+            <p id="auditSummaryText">
+              Calculando auditoría determinista...
+            </p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- GRÁFICAS PRINCIPALES (CHART.JS) -->
@@ -281,8 +584,8 @@
       <div class="panel chart-panel-seir">
         <div class="panel-header chart-header">
           <div>
-            <h2>🧬 Evolución SEIR Diaria</h2>
-            <p class="panel-desc">Transición promedio diaria de 🟢 S, 🟡 E, 🔴 I, 🔵 R en Manta (100,000 hab.).</p>
+            <h2>🧬 Evolución Diaria de Estados SEIR</h2>
+            <p class="panel-desc">Conteo promedio diario de 🟢 Sanos, 🟡 Mordidos, 🔴 Zombies y 🔵 Exorcizados/Inmunes.</p>
           </div>
           <select id="selectSeirStrategy" class="compact-select" aria-label="Estrategia para desglose SEIR">
             <option value="shield" selected>Escudo de Centralidad y Riesgo</option>
@@ -295,140 +598,11 @@
         </div>
       </div>
     </section>
-
-    <!-- MAPA TÁCTICO DEL GRAFO DE MANTA + DETALLE POR BARRIO -->
-    <section class="map-and-table-grid">
-      <!-- Mapa SVG Interactivo del Grafo de Manta -->
-      <div class="panel map-panel">
-        <div class="panel-header map-header">
-          <div>
-            <h2>🗺️ Grafo Táctico de Manta (8 Nodos · 13 Aristas de Contacto)</h2>
-            <p class="panel-desc">Inspecciona la propagación y el puntaje del Escudo día por día (Corrida #1 · Semilla Base). Haz clic en un nodo para ver su telemetría.</p>
-          </div>
-          <div class="map-strategy-group">
-            <label for="selectMapStrategy" class="sr-only">Estrategia en el mapa</label>
-            <select id="selectMapStrategy" class="compact-select">
-              <option value="shield" selected>Mapa: Escudo de Centralidad</option>
-              <option value="random">Mapa: Intervención al Azar</option>
-              <option value="none">Mapa: Sin Intervención</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Controles de Línea de Tiempo Diaria -->
-        <div class="timeline-controls">
-          <button type="button" id="btnPlayTimeline" class="btn btn-secondary btn-sm">▶ Reproducir</button>
-          <span class="day-indicator">Día <strong id="timelineDayLabel">0</strong> / <span id="timelineMaxDayLabel">60</span></span>
-          <input type="range" id="timelineSlider" min="0" max="60" step="1" value="0" aria-label="Día de inspección en el mapa" />
-        </div>
-
-        <div class="svg-map-wrapper">
-          <svg id="mantaGraphSvg" viewBox="0 0 820 465" role="img" aria-label="Grafo epidemiológico de los 8 barrios de Manta">
-            <defs>
-              <radialGradient id="oceanGrad" cx="35%" cy="15%" r="75%">
-                <stop offset="0%" stop-color="#0c2438" stop-opacity="0.7" />
-                <stop offset="100%" stop-color="#070d19" stop-opacity="0.15" />
-              </radialGradient>
-              <filter id="glowEmerald" x="-30%" y="-30%" width="160%" height="160%">
-                <feGaussianBlur stdDeviation="4" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-              <filter id="glowRed" x="-30%" y="-30%" width="160%" height="160%">
-                <feGaussianBlur stdDeviation="4.5" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-
-            <!-- Silueta estilizada de la Bahía de Manta y Océano Pacífico -->
-            <path
-              class="coast-water"
-              d="M 0,0 L 820,0 L 820,165 C 745,175 685,155 615,150 C 540,145 485,125 420,108 C 345,88 280,82 215,118 C 145,156 80,210 0,245 Z"
-              fill="url(#oceanGrad)"
-            />
-            <path
-              class="coast-line"
-              d="M 0,245 C 80,210 145,156 215,118 C 280,82 345,88 420,108 C 485,125 540,145 615,150 C 685,155 745,175 820,165"
-            />
-            <text x="34" y="42" class="map-ocean-label">OCÉANO PACÍFICO · BAHÍA DE MANTA</text>
-
-            <!-- Capas dinámicas renderizadas desde app.js -->
-            <g id="svgEdgesLayer"></g>
-            <g id="svgNodesLayer"></g>
-          </svg>
-        </div>
-
-        <!-- Inspector del Barrio Seleccionado -->
-        <div class="node-inspector" id="nodeInspector">
-          <div class="inspector-top">
-            <div>
-              <h3 id="inspNodeName">Selecciona un barrio</h3>
-              <p id="inspNodeMeta" class="inspector-meta">—</p>
-            </div>
-            <button type="button" id="btnSetPatientZeroFromMap" class="btn btn-ghost btn-sm">
-              ☣ Fijar como Paciente Cero
-            </button>
-          </div>
-          <div class="inspector-seir-bars">
-            <div class="insp-stat"><span class="dot-s">🟢 Sano</span> <strong id="inspS">0</strong></div>
-            <div class="insp-stat"><span class="dot-e">🟡 Mordido</span> <strong id="inspE">0</strong></div>
-            <div class="insp-stat"><span class="dot-i">🔴 Zombie</span> <strong id="inspI">0</strong></div>
-            <div class="insp-stat"><span class="dot-r">🔵 Exorc./Inm.</span> <strong id="inspR">0</strong></div>
-            <div class="insp-stat"><span class="dot-v">💉 Vacunados</span> <strong id="inspVac">0</strong></div>
-            <div class="insp-stat"><span class="dot-p">🎯 Puntaje Escudo</span> <strong id="inspScore">0.0</strong></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Tabla Comparativa por Barrio y Auditoría -->
-      <div class="panel table-panel">
-        <div class="panel-header">
-          <div>
-            <h2>🏛️ Desglose por Barrio y Cuellos de Botella</h2>
-            <p class="panel-desc">Estado promedio al cierre (Día <span id="tableFinalDay">60</span>) bajo <strong>Escudo de Centralidad y Riesgo</strong> vs. líneas base.</p>
-          </div>
-        </div>
-
-        <div class="table-responsive">
-          <table class="tactical-table">
-            <thead>
-              <tr>
-                <th>Barrio de Manta</th>
-                <th class="num">Pob.</th>
-                <th class="num" title="Número de aristas/conexiones en el grafo">Conex.</th>
-                <th class="num" title="Vacunas aplicadas exclusivamente a población 🟢 Sana">Vacunas (a 🟢 S)</th>
-                <th class="num" title="Infectados acumulados promedio sin intervención">Inf. Base 1</th>
-                <th class="num" title="Infectados acumulados promedio con vacunación al azar">Inf. Azar</th>
-                <th class="num" title="Infectados acumulados promedio con Escudo de Centralidad y Riesgo">Inf. Escudo</th>
-                <th class="num" title="Personas salvadas en este barrio respecto a Sin Intervención">Salvados (Escudo)</th>
-              </tr>
-            </thead>
-            <tbody id="barrioTableBody"></tbody>
-            <tfoot id="barrioTableFoot"></tfoot>
-          </table>
-        </div>
-
-        <div class="audit-callout">
-          <div class="audit-icon">🛡️</div>
-          <div>
-            <strong>Verificación de Regla Estricta y Determinismo:</strong>
-            <p id="auditSummaryText">
-              Calculando auditoría de dosis aplicadas y sub-semillas Monte Carlo...
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
   </main>
 
   <footer class="footer">
-    <span>Operación Contención Manta · Track B (La Plaga Zombie) · Modelo SEIR en Red con <code>mulberry32(seed)</code></span>
-    <span>Población Total: 100,000 hab. · 8 Barrios Reales · 13 Aristas de Contacto</span>
+    <span>Operación Contención Manta · Nivel Pro (Track B - La Plaga Zombie) · Determinismo <code>mulberry32(seed)</code></span>
+    <span>Población: 100,000 hab. · Vacuna $15 · Fumigación $1,200 (-40% / 5d) · Cierre $3,500 (-75% flujo)</span>
   </footer>
 
   <script src="./app.js"></script>
