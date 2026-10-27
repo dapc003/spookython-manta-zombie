@@ -901,11 +901,22 @@
   let timelineDay = 1;
   let timelineTimer = null;
   let plainTextMayorBrief = "";
+  let latestRequestId = 0;
+
+  const DEFAULT_LAMBDA_URL = "https://sw5fdgyzewlgqjttz2jhjkvaey0udlbt.lambda-url.us-east-2.on.aws/";
+  const LAMBDA_STORAGE_KEY = "manta_contencion_lambda_url";
 
   let comparisonChartInstance = null;
   let seirChartInstance = null;
 
   const dom = {
+    // Conexión Cloud AWS Lambda
+    inputLambdaUrl: document.getElementById("inputLambdaUrl"),
+    btnApplyLambda: document.getElementById("btnApplyLambda"),
+    btnClearLambda: document.getElementById("btnClearLambda"),
+    cloudStatusPill: document.getElementById("cloudStatusPill"),
+    cloudStatusText: document.getElementById("cloudStatusText"),
+
     form: document.getElementById("simForm"),
     inputSeed: document.getElementById("inputSeed"),
     rangeRuns: document.getElementById("rangeRuns"),
@@ -2117,22 +2128,148 @@
     executeFullSimulation(true);
   }
 
-  function executeFullSimulation(hideBanner = true) {
+  function setCloudStatus(mode, text) {
+    if (!dom.cloudStatusPill || !dom.cloudStatusText) return;
+    dom.cloudStatusPill.className = `cloud-status-pill ${mode}`;
+    dom.cloudStatusText.textContent = text;
+  }
+
+  function saveLambdaUrlPreference(url) {
+    try {
+      if (typeof url === "string") {
+        window.localStorage.setItem(LAMBDA_STORAGE_KEY, url);
+      }
+    } catch (_) {
+      // Ignorar silenciosamente si el navegador bloquea localStorage en modo archivo
+    }
+  }
+
+  function loadLambdaUrlPreference() {
+    try {
+      const stored = window.localStorage.getItem(LAMBDA_STORAGE_KEY);
+      if (stored === "local") return "";
+      return stored && stored.trim() ? stored.trim() : DEFAULT_LAMBDA_URL;
+    } catch (_) {
+      return DEFAULT_LAMBDA_URL;
+    }
+  }
+
+  async function requestCloudLambdaSimulation(lambdaUrl, config) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const t0 = performance.now();
+
+    try {
+      const payload = {
+        seed: config.seed,
+        runs: config.runs,
+        days: config.days,
+        beta: config.beta,
+        vaccines: config.totalVaccines,
+        vaccineEffectiveness: config.vaccineEfficacyPct,
+        initialNode: config.patientZeroIndex,
+        budget: config.totalBudget,
+        incubationDays: config.incubationDays,
+        dailyDoseArrival: config.dailyDoseArrival,
+        dailyBrigadeArrival: config.dailyBrigadeArrival,
+        useVaccines: config.useVaccines,
+        useFumigation: config.useFumigation,
+        useClosure: config.useClosure
+      };
+
+      const resp = await fetch(lambdaUrl, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+
+      let rawData = await resp.json();
+      if (rawData && typeof rawData.body === "string") {
+        rawData = JSON.parse(rawData.body);
+      }
+
+      if (!rawData || !rawData.summary || !rawData.summary.shield) {
+        throw new Error("Formato de respuesta incompleto");
+      }
+
+      const elapsedMs = performance.now() - t0;
+      const subSeeds = Array.isArray(rawData.subSeeds) && rawData.subSeeds.length > 0
+        ? Uint32Array.from(rawData.subSeeds)
+        : deriveSubSeeds(config.seed, config.runs);
+
+      return {
+        config,
+        subSeeds,
+        summary: rawData.summary,
+        strategies: rawData.strategies || null,
+        mayorRecommendation: rawData.mayorRecommendation || null,
+        elapsedMs,
+        hashHex: rawData.hashHex || "0xCLOUD200",
+        cloudEngine: rawData.engine || "aws-lambda-python3.12"
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  function renderAllViews(result) {
+    currentResult = result;
+    timelineDay = Math.max(1, Math.min(result.config.days, timelineDay || result.config.days));
+    renderKpisAndAudit(currentResult);
+    renderMayorReport(currentResult);
+    renderCharts(currentResult);
+    renderMapState();
+  }
+
+  async function executeFullSimulation(hideBanner = true) {
     stopTimelinePlayback();
     if (hideBanner) {
       dom.reproBanner.classList.add("hidden");
     }
 
+    const reqId = ++latestRequestId;
     const config = readConfigFromForm();
-    currentResult = runMonteCarloSimulation(config);
+    const lambdaUrl = dom.inputLambdaUrl ? dom.inputLambdaUrl.value.trim() : "";
+    saveLambdaUrlPreference(lambdaUrl || "local");
 
-    // Mantener timelineDay dentro de [1..days]
-    timelineDay = Math.max(1, Math.min(config.days, timelineDay || config.days));
+    if (!lambdaUrl) {
+      const localResult = runMonteCarloSimulation(config);
+      if (reqId !== latestRequestId) return;
+      setCloudStatus(
+        "mode-local",
+        `⚡ Motor Local Activo (${fmtDec.format(localResult.elapsedMs)} ms)`
+      );
+      renderAllViews(localResult);
+      return;
+    }
 
-    renderKpisAndAudit(currentResult);
-    renderMayorReport(currentResult);
-    renderCharts(currentResult);
-    renderMapState();
+    // Ejecución en AWS Lambda con Fallback Inteligente silencioso en milisegundos si falla la red
+    setCloudStatus("mode-loading", "☁️ Ejecutando en AWS Lambda...");
+    try {
+      const cloudResult = await requestCloudLambdaSimulation(lambdaUrl, config);
+      if (reqId !== latestRequestId) return;
+      renderAllViews(cloudResult);
+      dom.execTimingInfo.textContent =
+        `☁️ AWS Lambda · ${config.runs} corridas en ${Math.round(cloudResult.elapsedMs)} ms`;
+      setCloudStatus(
+        "mode-cloud",
+        `☁️ AWS Lambda Conectado (${Math.round(cloudResult.elapsedMs)} ms)`
+      );
+    } catch (_) {
+      if (reqId !== latestRequestId) return;
+      const fallbackResult = runMonteCarloSimulation(config);
+      renderAllViews(fallbackResult);
+      setCloudStatus(
+        "mode-fallback",
+        `⚡ Fallback Local Instantáneo (${fmtDec.format(fallbackResult.elapsedMs)} ms)`
+      );
+    }
   }
 
   function verifyDeterminismProof() {
@@ -2146,11 +2283,7 @@
       runA.summary.random.infectedStats.mean === runB.summary.random.infectedStats.mean &&
       runA.summary.none.infectedStats.mean === runB.summary.none.infectedStats.mean;
 
-    currentResult = runB;
-    renderKpisAndAudit(currentResult);
-    renderMayorReport(currentResult);
-    renderCharts(currentResult);
-    renderMapState();
+    renderAllViews(runB);
 
     dom.reproBanner.classList.remove("hidden");
     dom.reproBanner.textContent = identical
@@ -2273,11 +2406,39 @@
       dom.selectPatientZero.value = String(selectedNodeIndex);
       executeFullSimulation(true);
     });
+
+    if (dom.btnApplyLambda) {
+      dom.btnApplyLambda.addEventListener("click", () => {
+        executeFullSimulation(true);
+      });
+    }
+
+    if (dom.btnClearLambda) {
+      dom.btnClearLambda.addEventListener("click", () => {
+        if (dom.inputLambdaUrl) {
+          dom.inputLambdaUrl.value = "";
+        }
+        saveLambdaUrlPreference("local");
+        executeFullSimulation(true);
+      });
+    }
+
+    if (dom.inputLambdaUrl) {
+      dom.inputLambdaUrl.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          executeFullSimulation(true);
+        }
+      });
+    }
   }
 
   function bootstrap() {
     populatePatientZeroSelect();
     applyConfigToForm(DEFAULT_CONFIG);
+    if (dom.inputLambdaUrl) {
+      dom.inputLambdaUrl.value = loadLambdaUrlPreference();
+    }
     initStaticMapSkeleton();
     bindEvents();
     timelineDay = DEFAULT_CONFIG.days;

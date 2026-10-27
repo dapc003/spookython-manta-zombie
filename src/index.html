@@ -48,6 +48,45 @@
   </header>
 
   <main class="dashboard-container">
+    <!-- CONEXIÓN CLOUD AWS LAMBDA + FALLBACK INTELIGENTE -->
+    <section class="panel cloud-panel" aria-labelledby="cloudPanelTitle">
+      <div class="cloud-header-row">
+        <div>
+          <div class="cloud-title-group">
+            <h2 id="cloudPanelTitle">☁️ Conexión Cloud AWS Lambda</h2>
+            <span class="badge badge-outline">PYTHON 3.12 · SERVERLESS</span>
+          </div>
+          <p class="panel-desc">
+            Pega la <strong>Function URL</strong> de AWS Lambda para ejecutar Monte Carlo en la nube. Si está vacía o cae la red en pleno pitch, el <strong>Fallback Inteligente</strong> resuelve en local en milisegundos.
+          </p>
+        </div>
+
+        <div id="cloudStatusPill" class="cloud-status-pill mode-local" role="status" aria-live="polite">
+          <span id="cloudStatusDot" class="cloud-dot"></span>
+          <span id="cloudStatusText">⚡ Motor Local Activo (Fallback Instantáneo)</span>
+        </div>
+      </div>
+
+      <div class="cloud-input-row">
+        <label for="inputLambdaUrl" class="sr-only">Function URL de AWS Lambda</label>
+        <input
+          type="url"
+          id="inputLambdaUrl"
+          class="lambda-url-input"
+          value="https://sw5fdgyzewlgqjttz2jhjkvaey0udlbt.lambda-url.us-east-2.on.aws/"
+          placeholder="https://sw5fdgyzewlgqjttz2jhjkvaey0udlbt.lambda-url.us-east-2.on.aws/"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button type="button" id="btnApplyLambda" class="btn btn-primary btn-sm">
+          ☁️ Sincronizar y Simular
+        </button>
+        <button type="button" id="btnClearLambda" class="btn btn-secondary btn-sm" title="Dejar vacío para ejecutar directo en el motor local del navegador">
+          ⚡ Modo Local
+        </button>
+      </div>
+    </section>
+
     <!-- FORMULARIO UNIFICADO: PARÁMETROS BASE + PANEL ANTI-BROTE SORPRESA -->
     <form id="simForm" class="sim-master-form" novalidate>
       <!-- PANEL 1: PARÁMETROS EPIDEMIOLÓGICOS Y MONTE CARLO -->

@@ -256,6 +256,127 @@ code,
   gap: 20px;
 }
 
+/* CONEXIÓN CLOUD AWS LAMBDA + FALLBACK INTELIGENTE */
+.cloud-panel {
+  border-color: rgba(56, 189, 248, 0.34);
+  background: linear-gradient(155deg, rgba(11, 22, 41, 0.94), rgba(8, 15, 29, 0.94));
+  padding: 16px 20px;
+}
+
+.cloud-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cloud-title-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cloud-title-group h2 {
+  margin: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.cloud-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.lambda-url-input {
+  width: 100%;
+  background: var(--bg-input);
+  color: #e2e8f0;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.lambda-url-input:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.cloud-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: "JetBrains Mono", monospace;
+  border: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 42, 0.9);
+  transition: all 0.2s ease;
+}
+
+.cloud-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cloud-status-pill.mode-local {
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #7dd3fc;
+}
+.cloud-status-pill.mode-local .cloud-dot {
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+.cloud-status-pill.mode-loading {
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #fde68a;
+}
+.cloud-status-pill.mode-loading .cloud-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 10px #f59e0b;
+}
+
+.cloud-status-pill.mode-cloud {
+  border-color: rgba(6, 214, 160, 0.5);
+  background: rgba(6, 214, 160, 0.12);
+  color: #6ee7b7;
+}
+.cloud-status-pill.mode-cloud .cloud-dot {
+  background: #06d6a0;
+  box-shadow: 0 0 10px #06d6a0;
+}
+
+.cloud-status-pill.mode-fallback {
+  border-color: rgba(56, 189, 248, 0.42);
+  background: rgba(56, 189, 248, 0.1);
+  color: #bae6fd;
+}
+.cloud-status-pill.mode-fallback .cloud-dot {
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+@media (max-width: 720px) {
+  .cloud-input-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .sim-master-form {
   display: flex;
   flex-direction: column;
