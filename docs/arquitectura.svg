@@ -1,0 +1,439 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="archTitle archDesc">
+  <title id="archTitle">Arquitectura Cloud AWS - Operación Contención Manta (SpookyThon 2026)</title>
+  <desc id="archDesc">Diagrama de arquitectura serverless mostrando Usuario/Jurado público conectándose por HTTPS a AWS Amplify Hosting y AWS Lambda Function URL (Python 3.12), con monitoreo privado en Amazon CloudWatch, rol IAM de mínimo privilegio y alerta activa desde el Día 1 en AWS Budgets.</desc>
+
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#060b16"/>
+      <stop offset="55%" stop-color="#0b1324"/>
+      <stop offset="100%" stop-color="#09101f"/>
+    </linearGradient>
+
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f1b33"/>
+      <stop offset="50%" stop-color="#132342"/>
+      <stop offset="100%" stop-color="#0f1b33"/>
+    </linearGradient>
+
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#131f36"/>
+      <stop offset="100%" stop-color="#0d1628"/>
+    </linearGradient>
+
+    <linearGradient id="amplifyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff9900"/>
+      <stop offset="100%" stop-color="#dd344c"/>
+    </linearGradient>
+
+    <linearGradient id="lambdaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff9900"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+
+    <linearGradient id="cwGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e7157b"/>
+      <stop offset="100%" stop-color="#9333ea"/>
+    </linearGradient>
+
+    <linearGradient id="iamGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#dd344c"/>
+      <stop offset="100%" stop-color="#b91c1c"/>
+    </linearGradient>
+
+    <linearGradient id="budgetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#047857"/>
+    </linearGradient>
+
+    <pattern id="gridPattern" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#1e293b" stroke-width="0.7" stroke-opacity="0.45"/>
+    </pattern>
+
+    <filter id="cardShadow" x="-8%" y="-8%" width="116%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#020617" flood-opacity="0.65"/>
+    </filter>
+
+    <marker id="arrowCyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8"/>
+    </marker>
+
+    <marker id="arrowOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#fb923c"/>
+    </marker>
+
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#c084fc"/>
+    </marker>
+
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#34d399"/>
+    </marker>
+
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#f87171"/>
+    </marker>
+  </defs>
+
+  <!-- FONDO BASE + RETÍCULA TÉCNICA -->
+  <rect width="1280" height="720" fill="url(#bgGrad)"/>
+  <rect width="1280" height="720" fill="url(#gridPattern)"/>
+
+  <!-- ENCABEZADO SUPERIOR -->
+  <rect x="32" y="18" width="1216" height="72" rx="12" fill="url(#headerGrad)" stroke="#334155" stroke-width="1.2"/>
+  <circle cx="62" cy="54" r="14" fill="#10b981" fill-opacity="0.18" stroke="#10b981" stroke-width="1.6"/>
+  <circle cx="62" cy="54" r="6" fill="#10b981"/>
+  <text x="88" y="47" fill="#f8fafc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="19" font-weight="800" letter-spacing="0.4">
+    OPERACIÓN CONTENCIÓN MANTA — ARQUITECTURA CLOUD SERVERLESS (AWS)
+  </text>
+  <text x="88" y="70" fill="#94a3b8" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="12.5" font-weight="500">
+    SpookyThon 2026 · Track B: La Plaga Zombie · Simulación Epidemiológica Monte Carlo SEIR Reproducible (seed = 2026)
+  </text>
+
+  <!-- LEYENDA PÚBLICO vs PRIVADO EN CABECERA -->
+  <rect x="862" y="34" width="174" height="38" rx="19" fill="#064e3b" fill-opacity="0.65" stroke="#10b981" stroke-width="1.3"/>
+  <circle cx="882" cy="53" r="5" fill="#34d399"/>
+  <text x="895" y="57" fill="#d1fae5" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5" font-weight="700">
+    COMPONENTE PÚBLICO
+  </text>
+
+  <rect x="1048" y="34" width="182" height="38" rx="19" fill="#3b0764" fill-opacity="0.65" stroke="#c084fc" stroke-width="1.3"/>
+  <circle cx="1068" cy="53" r="5" fill="#c084fc"/>
+  <text x="1081" y="57" fill="#f3e8ff" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5" font-weight="700">
+    COMPONENTE PRIVADO
+  </text>
+
+  <!-- ======================================================================= -->
+  <!-- ZONA IZQUIERDA: ZONA PÚBLICA CLIENTE / NAVEGADOR                        -->
+  <!-- ======================================================================= -->
+  <rect x="32" y="106" width="284" height="564" rx="14" fill="#0b172a" fill-opacity="0.55" stroke="#10b981" stroke-width="1.6" stroke-dasharray="7 5"/>
+  <rect x="48" y="118" width="212" height="24" rx="6" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
+  <text x="154" y="134" text-anchor="middle" fill="#6ee7b7" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11" font-weight="800" letter-spacing="0.5">
+    ZONA PÚBLICA · CLIENTE WEB
+  </text>
+
+  <!-- NODO 1: USUARIO / JURADO -->
+  <g filter="url(#cardShadow)">
+    <rect x="50" y="156" width="248" height="222" rx="12" fill="url(#cardGrad)" stroke="#38bdf8" stroke-width="1.6"/>
+    <!-- Etiqueta PÚBLICO -->
+    <rect x="206" y="168" width="80" height="22" rx="11" fill="#065f46" stroke="#34d399" stroke-width="1"/>
+    <text x="246" y="183" text-anchor="middle" fill="#ecfdf5" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="10.5" font-weight="800">
+      PÚBLICO
+    </text>
+
+    <!-- Icono Usuario/Jurado -->
+    <rect x="66" y="168" width="46" height="46" rx="10" fill="#0284c7" fill-opacity="0.25" stroke="#38bdf8" stroke-width="1.4"/>
+    <circle cx="89" cy="184" r="8" fill="none" stroke="#7dd3fc" stroke-width="2.2"/>
+    <path d="M 75 206 C 75 196, 103 196, 103 206" fill="none" stroke="#7dd3fc" stroke-width="2.2" stroke-linecap="round"/>
+
+    <text x="66" y="236" fill="#f8fafc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="16" font-weight="800">
+      Usuario / Jurado / COE
+    </text>
+    <text x="66" y="255" fill="#38bdf8" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="12" font-weight="600">
+      Navegador Web (HTTPS / TLS 1.3)
+    </text>
+
+    <line x1="66" y1="268" x2="282" y2="268" stroke="#1e293b" stroke-width="1"/>
+    <text x="66" y="290" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Mapa SVG animado (8 barrios Manta)
+    </text>
+    <text x="66" y="311" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Panel Anti-Brote Sorpresa en vivo
+    </text>
+    <text x="66" y="332" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Curvas SEIR + Rangos [Min - Max]
+    </text>
+    <text x="66" y="353" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Informe Ejecutivo para el Alcalde
+    </text>
+  </g>
+
+  <!-- NODO 1B: MOTOR FALLBACK INTELIGENTE LOCAL -->
+  <g filter="url(#cardShadow)">
+    <rect x="50" y="428" width="248" height="218" rx="12" fill="url(#cardGrad)" stroke="#10b981" stroke-width="1.5"/>
+    <rect x="172" y="440" width="114" height="22" rx="11" fill="#064e3b" stroke="#10b981" stroke-width="1"/>
+    <text x="229" y="455" text-anchor="middle" fill="#a7f3d0" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="10" font-weight="800">
+      PÚBLICO · CLIENTE
+    </text>
+
+    <rect x="66" y="440" width="42" height="42" rx="10" fill="#10b981" fill-opacity="0.2" stroke="#10b981" stroke-width="1.4"/>
+    <path d="M 90 448 L 79 463 L 88 463 L 84 475 L 96 459 L 87 459 Z" fill="#34d399"/>
+
+    <text x="66" y="504" fill="#f8fafc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="15" font-weight="800">
+      Fallback Inteligente Local
+    </text>
+    <text x="66" y="522" fill="#34d399" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5" font-weight="600">
+      Motor JS Determinista mulberry32(seed)
+    </text>
+    <line x1="66" y1="534" x2="282" y2="534" stroke="#1e293b" stroke-width="1"/>
+    <text x="66" y="555" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Se activa al instante si cae el Wi-Fi
+    </text>
+    <text x="66" y="575" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Resuelve 50 corridas en ~12 ms
+    </text>
+    <text x="66" y="595" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Cero pantallas de error en el pitch
+    </text>
+    <text x="66" y="615" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="10.5">
+      Hash local: 0x99285FE0 (seed 2026)
+    </text>
+  </g>
+
+  <!-- Flecha Fallback interno -->
+  <path d="M 174 378 L 174 426" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrowGreen)"/>
+  <rect x="104" y="391" width="140" height="20" rx="5" fill="#09101f" stroke="#10b981" stroke-width="0.9"/>
+  <text x="174" y="405" text-anchor="middle" fill="#6ee7b7" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="10.5" font-weight="700">
+    Auto-Fallback sin red
+  </text>
+
+  <!-- ======================================================================= -->
+  <!-- CONTENEDOR PRINCIPAL AWS CLOUD (us-east-2)                              -->
+  <!-- ======================================================================= -->
+  <rect x="380" y="106" width="868" height="564" rx="16" fill="#0d1526" fill-opacity="0.7" stroke="#ff9900" stroke-width="2"/>
+
+  <!-- Insignia AWS Cloud -->
+  <rect x="398" y="118" width="465" height="28" rx="7" fill="#1e293b" stroke="#ff9900" stroke-width="1.2"/>
+  <rect x="406" y="123" width="38" height="18" rx="4" fill="#ff9900"/>
+  <text x="425" y="136" text-anchor="middle" fill="#0f172a" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11" font-weight="900">
+    AWS
+  </text>
+  <text x="454" y="136" fill="#f8fafc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="12" font-weight="700">
+    AWS Cloud · Región us-east-2 (Ohio) · Arquitectura 100% Serverless
+  </text>
+
+  <rect x="976" y="118" width="252" height="28" rx="7" fill="#172554" stroke="#3b82f6" stroke-width="1"/>
+  <text x="1102" y="136" text-anchor="middle" fill="#93c5fd" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11" font-weight="700">
+    🛡️ Sin Buckets S3 Públicos Expuestos
+  </text>
+
+  <!-- SUB-ZONA A: ENDPOINTS PÚBLICOS ADMINISTRADOS CON HTTPS -->
+  <rect x="400" y="158" width="396" height="494" rx="12" fill="#0f1d35" fill-opacity="0.55" stroke="#38bdf8" stroke-width="1.4" stroke-dasharray="6 4"/>
+  <text x="598" y="180" text-anchor="middle" fill="#7dd3fc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5" font-weight="800" letter-spacing="0.5">
+    CAPA DE ENTRADA HTTPS PÚBLICA (EDGE &amp; API)
+  </text>
+
+  <!-- NODO 2: AWS AMPLIFY HOSTING -->
+  <g filter="url(#cardShadow)">
+    <rect x="420" y="196" width="356" height="196" rx="12" fill="url(#cardGrad)" stroke="#ff9900" stroke-width="1.6"/>
+    <!-- Etiqueta PÚBLICO -->
+    <rect x="646" y="208" width="116" height="22" rx="11" fill="#065f46" stroke="#34d399" stroke-width="1"/>
+    <text x="704" y="223" text-anchor="middle" fill="#ecfdf5" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="10.5" font-weight="800">
+      PÚBLICO · HTTPS
+    </text>
+
+    <!-- Icono AWS Amplify -->
+    <rect x="438" y="208" width="48" height="48" rx="10" fill="url(#amplifyGrad)"/>
+    <path d="M 462 217 L 478 246 L 469 246 L 462 232 L 454 246 L 446 246 Z" fill="#ffffff"/>
+    <path d="M 455 246 L 469 246" stroke="#ffffff" stroke-width="2.5"/>
+
+    <text x="498" y="230" fill="#f8fafc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="16" font-weight="800">
+      AWS Amplify Hosting
+    </text>
+    <text x="498" y="249" fill="#fbbf24" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="12" font-weight="600">
+      Frontend Web Estático + CDN CloudFront
+    </text>
+
+    <line x1="438" y1="266" x2="758" y2="266" stroke="#1e293b" stroke-width="1"/>
+    <text x="438" y="288" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Entrega estática global: index.html, styles.css, app.js
+    </text>
+    <text x="438" y="309" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Certificado HTTPS automático y compresión Brotli/Gzip
+    </text>
+    <text x="438" y="330" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Cero credenciales ni claves AWS expuestas en cliente
+    </text>
+    <text x="438" y="351" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="10.5">
+      Artefacto liviano (~185 KB) · Capa Gratuita AWS
+    </text>
+  </g>
+
+  <!-- NODO 3: AWS LAMBDA + FUNCTION URL -->
+  <g filter="url(#cardShadow)">
+    <rect x="420" y="424" width="356" height="212" rx="12" fill="url(#cardGrad)" stroke="#fb923c" stroke-width="1.8"/>
+    <!-- Etiquetas Endpoint Público + Runtime Privado -->
+    <rect x="530" y="436" width="114" height="22" rx="11" fill="#065f46" stroke="#34d399" stroke-width="1"/>
+    <text x="587" y="451" text-anchor="middle" fill="#ecfdf5" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="10" font-weight="800">
+      URL PÚBLICA HTTPS
+    </text>
+    <rect x="650" y="436" width="114" height="22" rx="11" fill="#4c1d95" stroke="#c084fc" stroke-width="1"/>
+    <text x="707" y="451" text-anchor="middle" fill="#f3e8ff" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="10" font-weight="800">
+      RUNTIME PRIVADO
+    </text>
+
+    <!-- Icono AWS Lambda -->
+    <rect x="438" y="436" width="48" height="48" rx="10" fill="url(#lambdaGrad)"/>
+    <text x="462" y="470" text-anchor="middle" fill="#ffffff" font-family="Georgia, serif" font-size="30" font-weight="700">
+      λ
+    </text>
+
+    <text x="498" y="474" fill="#f8fafc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="16" font-weight="800">
+      AWS Lambda Function URL
+    </text>
+    <text x="498" y="492" fill="#fb923c" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="12" font-weight="600">
+      Motor Monte Carlo Python 3.12 (512 MB RAM)
+    </text>
+
+    <line x1="438" y1="504" x2="758" y2="504" stroke="#1e293b" stroke-width="1"/>
+    <text x="438" y="525" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Ejecuta 3 estrategias SEIR sobre 8 barrios de Manta
+    </text>
+    <text x="438" y="545" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Regla estricta auditada: vacuna 100% solo a 🟢 Sanos
+    </text>
+    <text x="438" y="565" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Solo librería estándar: json, math, random (CORS *)
+    </text>
+    <text x="438" y="585" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Validación y acotamiento estricto de payload JSON
+    </text>
+    <text x="438" y="608" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="10.5">
+      infra/lambda_simulador.py · Hash: 0x45949A6E
+    </text>
+  </g>
+
+  <!-- SUB-ZONA B: ZONA PRIVADA AWS (OBSERVABILIDAD, IAM Y GOBERNANZA) -->
+  <rect x="844" y="158" width="384" height="494" rx="12" fill="#1a1033" fill-opacity="0.45" stroke="#c084fc" stroke-width="1.4" stroke-dasharray="6 4"/>
+  <text x="1036" y="180" text-anchor="middle" fill="#e9d5ff" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5" font-weight="800" letter-spacing="0.5">
+    ZONA PRIVADA AWS (MONITOREO, IAM Y COSTOS)
+  </text>
+
+  <!-- NODO 4: AWS IAM EXECUTION ROLE -->
+  <g filter="url(#cardShadow)">
+    <rect x="862" y="196" width="348" height="126" rx="12" fill="url(#cardGrad)" stroke="#f87171" stroke-width="1.5"/>
+    <rect x="1106" y="208" width="90" height="22" rx="11" fill="#4c1d95" stroke="#c084fc" stroke-width="1"/>
+    <text x="1151" y="223" text-anchor="middle" fill="#f3e8ff" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="10.5" font-weight="800">
+      PRIVADO
+    </text>
+
+    <rect x="878" y="208" width="44" height="44" rx="10" fill="url(#iamGrad)"/>
+    <path d="M 900 216 L 913 222 L 913 232 C 913 240, 906 245, 900 247 C 894 245, 887 240, 887 232 L 887 222 Z" fill="none" stroke="#ffffff" stroke-width="2.2"/>
+    <circle cx="900" cy="231" r="3" fill="#ffffff"/>
+
+    <text x="934" y="229" fill="#f8fafc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="15" font-weight="800">
+      AWS IAM Execution Role
+    </text>
+    <text x="934" y="247" fill="#fca5a5" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5" font-weight="600">
+      Seguridad de Mínimo Privilegio
+    </text>
+    <text x="878" y="274" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Solo AWSLambdaBasicExecutionRole (CloudWatch)
+    </text>
+    <text x="878" y="294" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Sin permisos sobre S3, DynamoDB ni EC2
+    </text>
+  </g>
+
+  <!-- NODO 5: AMAZON CLOUDWATCH -->
+  <g filter="url(#cardShadow)">
+    <rect x="862" y="348" width="348" height="138" rx="12" fill="url(#cardGrad)" stroke="#c084fc" stroke-width="1.6"/>
+    <rect x="1106" y="360" width="90" height="22" rx="11" fill="#4c1d95" stroke="#c084fc" stroke-width="1"/>
+    <text x="1151" y="375" text-anchor="middle" fill="#f3e8ff" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="10.5" font-weight="800">
+      PRIVADO
+    </text>
+
+    <rect x="878" y="360" width="44" height="44" rx="10" fill="url(#cwGrad)"/>
+    <polyline points="886,389 895,380 902,385 913,371" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="913" cy="371" r="2.8" fill="#ffffff"/>
+
+    <text x="934" y="381" fill="#f8fafc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="15" font-weight="800">
+      Amazon CloudWatch
+    </text>
+    <text x="934" y="399" fill="#e879f9" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5" font-weight="600">
+      Logs y Monitoreo Operativo Privado
+    </text>
+    <text x="878" y="427" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Grupo privado /aws/lambda/simulador-manta
+    </text>
+    <text x="878" y="447" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Métricas de latencia, memoria, errores y throttling
+    </text>
+    <text x="878" y="468" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="10.5">
+      Always Free: hasta 5 GB/mes de ingesta de logs
+    </text>
+  </g>
+
+  <!-- NODO 6: AWS BUDGETS -->
+  <g filter="url(#cardShadow)">
+    <rect x="862" y="508" width="348" height="128" rx="12" fill="url(#cardGrad)" stroke="#10b981" stroke-width="1.6"/>
+    <rect x="1084" y="520" width="112" height="22" rx="11" fill="#4c1d95" stroke="#c084fc" stroke-width="1"/>
+    <text x="1140" y="535" text-anchor="middle" fill="#f3e8ff" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="10" font-weight="800">
+      PRIVADO · DÍA 1
+    </text>
+
+    <rect x="878" y="520" width="44" height="44" rx="10" fill="url(#budgetGrad)"/>
+    <text x="900" y="550" text-anchor="middle" fill="#ffffff" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="24" font-weight="800">
+      $
+    </text>
+
+    <text x="934" y="541" fill="#f8fafc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="15" font-weight="800">
+      AWS Budgets
+    </text>
+    <text x="934" y="559" fill="#34d399" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5" font-weight="600">
+      Alerta Financiera Activa desde el Día 1
+    </text>
+    <text x="878" y="586" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Umbral estricto configurado: $1.00 USD / mes
+    </text>
+    <text x="878" y="606" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5">
+      • Gasto real SpookyThon 2026: $0.00 USD (Free Tier)
+    </text>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- CONECTORES Y FLUJOS DE DATOS NUMERADOS                                  -->
+  <!-- ======================================================================= -->
+
+  <!-- 1. Usuario/Jurado <-> AWS Amplify Hosting (HTTPS Público) -->
+  <path d="M 298 258 L 418 258" fill="none" stroke="#38bdf8" stroke-width="2.6" marker-end="url(#arrowCyan)" marker-start="url(#arrowCyan)"/>
+  <rect x="306" y="220" width="106" height="30" rx="6" fill="#09101f" stroke="#38bdf8" stroke-width="1"/>
+  <text x="359" y="233" text-anchor="middle" fill="#7dd3fc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="10" font-weight="800">
+    ① HTTPS GET
+  </text>
+  <text x="359" y="245" text-anchor="middle" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="9.5">
+    Web Estática
+  </text>
+
+  <!-- 2. Usuario/Jurado <-> AWS Lambda Function URL (POST JSON HTTPS CORS) -->
+  <path d="M 298 332 L 348 332 L 348 528 L 418 528" fill="none" stroke="#fb923c" stroke-width="2.6" marker-end="url(#arrowOrange)" marker-start="url(#arrowOrange)"/>
+  <rect x="303" y="416" width="90" height="44" rx="6" fill="#09101f" stroke="#fb923c" stroke-width="1.1"/>
+  <text x="348" y="431" text-anchor="middle" fill="#fdba74" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="10" font-weight="800">
+    ② HTTPS POST
+  </text>
+  <text x="348" y="444" text-anchor="middle" fill="#e2e8f0" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="9.5">
+    JSON + CORS
+  </text>
+  <text x="348" y="455" text-anchor="middle" fill="#94a3b8" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="8.8">
+    Monte Carlo
+  </text>
+
+  <!-- 3. AWS Lambda -> Amazon CloudWatch Logs (Privado) -->
+  <path d="M 776 496 L 820 496 L 820 418 L 860 418" fill="none" stroke="#c084fc" stroke-width="2.4" marker-end="url(#arrowPurple)"/>
+  <rect x="782" y="444" width="76" height="32" rx="6" fill="#09101f" stroke="#c084fc" stroke-width="1"/>
+  <text x="820" y="458" text-anchor="middle" fill="#e9d5ff" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="9.5" font-weight="800">
+    ③ Logs IAM
+  </text>
+  <text x="820" y="470" text-anchor="middle" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="9">
+    Privado
+  </text>
+
+  <!-- 4. AWS IAM -> AWS Lambda & CloudWatch (Mínimo Privilegio) -->
+  <path d="M 862 260 L 818 260 L 818 432 L 778 432" fill="none" stroke="#f87171" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#arrowRed)"/>
+  <path d="M 1036 322 L 1036 346" fill="none" stroke="#f87171" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#arrowRed)"/>
+
+  <!-- 5. AWS Budgets -> Gobernando Costos de Lambda / Amplify / CloudWatch -->
+  <path d="M 862 572 L 778 572" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrowGreen)"/>
+  <rect x="783" y="580" width="74" height="30" rx="6" fill="#09101f" stroke="#10b981" stroke-width="1"/>
+  <text x="820" y="593" text-anchor="middle" fill="#6ee7b7" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="9.5" font-weight="800">
+    ④ Alerta $1
+  </text>
+  <text x="820" y="604" text-anchor="middle" fill="#cbd5e1" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="8.8">
+    Real: $0.00
+  </text>
+
+  <!-- PIE DE DIAGRAMA -->
+  <text x="640" y="698" text-anchor="middle" fill="#64748b" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5" font-weight="600">
+    Diseño Serverless Resiliente · Cero Servidores Ociosos · Principio de Mínimo Privilegio (IAM) · Costo Real SpookyThon 2026: $0.00 USD
+  </text>
+</svg>

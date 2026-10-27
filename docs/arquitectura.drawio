@@ -1,0 +1,110 @@
+<mxfile host="app.diagrams.net" modified="2026-10-27T04:36:00.000Z" agent="Operacion-Contencion-Manta-SpookyThon2026" version="24.7.17" type="device">
+  <diagram id="manta-zombie-aws-arch" name="Arquitectura AWS - Operacion Contencion Manta">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1280" pageHeight="760" background="#0B1324" math="0" shadow="1">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- BANNER DE TITULO -->
+        <mxCell id="title_banner" value="&lt;b style=&quot;font-size:16px;color:#F8FAFC;&quot;&gt;OPERACIÓN CONTENCIÓN MANTA — ARQUITECTURA CLOUD SERVERLESS (AWS)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:11px;color:#94A3B8;&quot;&gt;SpookyThon 2026 · Track B: La Plaga Zombie · Separación Explícita de Componentes PÚBLICOS (HTTPS) y PRIVADOS (IAM / Gobernanza)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#132342;strokeColor=#334155;strokeWidth=1.5;align=left;spacingLeft=18;" vertex="1" parent="1">
+          <mxGeometry x="30" y="20" width="1220" height="64" as="geometry" />
+        </mxCell>
+
+        <!-- ZONA PUBLICA: CLIENTE / INTERNET -->
+        <mxCell id="zone_public_client" value="&lt;b&gt;ZONA PÚBLICA · CLIENTE / INTERNET&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 6;fillColor=#0B172A;strokeColor=#10B981;strokeWidth=2;verticalAlign=top;align=center;fontColor=#6EE7B7;fontSize=12;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="30" y="105" width="290" height="585" as="geometry" />
+        </mxCell>
+
+        <!-- NODO: USUARIO / JURADO (PUBLICO) -->
+        <mxCell id="node_user" value="&lt;span style=&quot;background-color:#065F46;color:#ECFDF5;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:bold;&quot;&gt;PÚBLICO&lt;/span&gt;&lt;br&gt;&lt;br&gt;&lt;b style=&quot;font-size:14px;color:#F8FAFC;&quot;&gt;Usuario / Jurado / COE&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;color:#38BDF8;font-size:11px;&quot;&gt;Navegador Web (HTTPS / TLS 1.3)&lt;/span&gt;&lt;hr size=&quot;1&quot; color=&quot;#1E293B&quot;&gt;&lt;div style=&quot;text-align:left;font-size:11px;color:#CBD5E1;&quot;&gt;• Mapa SVG animado (8 barrios Manta)&lt;br&gt;• Panel Anti-Brote Sorpresa&lt;br&gt;• Curvas SEIR + Rangos [Min - Max]&lt;br&gt;• Informe Ejecutivo para el Alcalde&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#131F36;strokeColor=#38BDF8;strokeWidth=2;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="150" width="250" height="220" as="geometry" />
+        </mxCell>
+
+        <!-- NODO: FALLBACK INTELIGENTE LOCAL -->
+        <mxCell id="node_fallback" value="&lt;span style=&quot;background-color:#064E3B;color:#A7F3D0;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:bold;&quot;&gt;PÚBLICO · CLIENTE&lt;/span&gt;&lt;br&gt;&lt;br&gt;&lt;b style=&quot;font-size:13px;color:#F8FAFC;&quot;&gt;⚡ Fallback Inteligente Local&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;color:#34D399;font-size:11px;&quot;&gt;Motor JS Determinista mulberry32(2026)&lt;/span&gt;&lt;hr size=&quot;1&quot; color=&quot;#1E293B&quot;&gt;&lt;div style=&quot;text-align:left;font-size:11px;color:#CBD5E1;&quot;&gt;• Activo al instante si cae la red o URL vacía&lt;br&gt;• 50 corridas Monte Carlo en ~12 ms&lt;br&gt;• Cero errores visibles durante el pitch&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#131F36;strokeColor=#10B981;strokeWidth=1.8;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="50" y="435" width="250" height="220" as="geometry" />
+        </mxCell>
+
+        <!-- CONTENEDOR AWS CLOUD -->
+        <mxCell id="aws_cloud_box" value="&lt;b&gt;AWS Cloud · Región us-east-2 (Ohio) · Sin Buckets S3 Públicos&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0D1526;strokeColor=#FF9900;strokeWidth=2.2;verticalAlign=top;align=left;spacingLeft=16;spacingTop=8;fontColor=#FF9900;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="385" y="105" width="865" height="585" as="geometry" />
+        </mxCell>
+
+        <!-- SUB-ZONA PUBLICA EN AWS -->
+        <mxCell id="aws_public_edge" value="&lt;b&gt;CAPA DE ENTRADA PÚBLICA HTTPS (EDGE &amp;amp; SERVERLESS API)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;fillColor=#0F1D35;strokeColor=#38BDF8;strokeWidth=1.5;verticalAlign=top;align=center;fontColor=#7DD3FC;fontSize=11;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="405" y="150" width="395" height="520" as="geometry" />
+        </mxCell>
+
+        <!-- NODO: AWS AMPLIFY HOSTING (PUBLICO) -->
+        <mxCell id="node_amplify" value="&lt;span style=&quot;background-color:#065F46;color:#ECFDF5;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:bold;&quot;&gt;PÚBLICO · HTTPS&lt;/span&gt;&lt;br&gt;&lt;br&gt;&lt;b style=&quot;font-size:14px;color:#F8FAFC;&quot;&gt;AWS Amplify Hosting&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;color:#FBBF24;font-size:11px;&quot;&gt;Frontend Web Estático Público con HTTPS&lt;/span&gt;&lt;hr size=&quot;1&quot; color=&quot;#1E293B&quot;&gt;&lt;div style=&quot;text-align:left;font-size:11px;color:#CBD5E1;&quot;&gt;• Sirve src/index.html, styles.css y app.js&lt;br&gt;• CDN CloudFront integrado + SSL/TLS 1.3&lt;br&gt;• Sin Buckets S3 públicos ni claves en cliente&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#131F36;strokeColor=#FF9900;strokeWidth=2;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="425" y="190" width="355" height="195" as="geometry" />
+        </mxCell>
+
+        <!-- NODO: AWS LAMBDA FUNCTION URL -->
+        <mxCell id="node_lambda" value="&lt;span style=&quot;background-color:#065F46;color:#ECFDF5;padding:2px 6px;border-radius:8px;font-size:10px;font-weight:bold;&quot;&gt;ENDPOINT PÚBLICO HTTPS&lt;/span&gt; &lt;span style=&quot;background-color:#4C1D95;color:#F3E8FF;padding:2px 6px;border-radius:8px;font-size:10px;font-weight:bold;&quot;&gt;RUNTIME PRIVADO&lt;/span&gt;&lt;br&gt;&lt;br&gt;&lt;b style=&quot;font-size:14px;color:#F8FAFC;&quot;&gt;AWS Lambda + Function URL&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;color:#FB923C;font-size:11px;&quot;&gt;Motor Serverless Python 3.12 para Monte Carlo (512 MB)&lt;/span&gt;&lt;hr size=&quot;1&quot; color=&quot;#1E293B&quot;&gt;&lt;div style=&quot;text-align:left;font-size:11px;color:#CBD5E1;&quot;&gt;• infra/lambda_simulador.py (solo json, math, random)&lt;br&gt;• CORS abierto (*) para OPTIONS y POST JSON&lt;br&gt;• 3 estrategias SEIR en grafo de 8 nodos de Manta&lt;br&gt;• Regla estricta: vacuna 100% solo a población 🟢 Sana&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#131F36;strokeColor=#FB923C;strokeWidth=2;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="425" y="425" width="355" height="225" as="geometry" />
+        </mxCell>
+
+        <!-- SUB-ZONA PRIVADA EN AWS -->
+        <mxCell id="aws_private_zone" value="&lt;b&gt;ZONA PRIVADA AWS (OBSERVABILIDAD, IAM Y COSTOS)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;fillColor=#1A1033;strokeColor=#C084FC;strokeWidth=1.5;verticalAlign=top;align=center;fontColor=#E9D5FF;fontSize=11;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="840" y="150" width="390" height="520" as="geometry" />
+        </mxCell>
+
+        <!-- NODO: AWS IAM (PRIVADO) -->
+        <mxCell id="node_iam" value="&lt;span style=&quot;background-color:#4C1D95;color:#F3E8FF;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:bold;&quot;&gt;PRIVADO · IAM&lt;/span&gt;&lt;br&gt;&lt;b style=&quot;font-size:13px;color:#F8FAFC;&quot;&gt;AWS IAM Execution Role&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;color:#FCA5A5;font-size:11px;&quot;&gt;Principio de Mínimo Privilegio&lt;/span&gt;&lt;div style=&quot;text-align:left;font-size:11px;color:#CBD5E1;margin-top:6px;&quot;&gt;• Solo AWSLambdaBasicExecutionRole&lt;br&gt;• Sin permisos a S3, DynamoDB ni EC2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#131F36;strokeColor=#F87171;strokeWidth=1.8;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="860" y="190" width="350" height="130" as="geometry" />
+        </mxCell>
+
+        <!-- NODO: AMAZON CLOUDWATCH (PRIVADO) -->
+        <mxCell id="node_cloudwatch" value="&lt;span style=&quot;background-color:#4C1D95;color:#F3E8FF;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:bold;&quot;&gt;PRIVADO&lt;/span&gt;&lt;br&gt;&lt;b style=&quot;font-size:14px;color:#F8FAFC;&quot;&gt;Amazon CloudWatch&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;color:#E879F9;font-size:11px;&quot;&gt;Logs y Monitoreo Operativo Privado&lt;/span&gt;&lt;div style=&quot;text-align:left;font-size:11px;color:#CBD5E1;margin-top:6px;&quot;&gt;• Trazas privadas /aws/lambda/simulador-manta&lt;br&gt;• Métricas de duración, RAM e invocaciones&lt;br&gt;• Always Free: 5 GB/mes de ingesta de logs&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#131F36;strokeColor=#C084FC;strokeWidth=1.8;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="860" y="345" width="350" height="150" as="geometry" />
+        </mxCell>
+
+        <!-- NODO: AWS BUDGETS (PRIVADO DIA 1) -->
+        <mxCell id="node_budgets" value="&lt;span style=&quot;background-color:#4C1D95;color:#F3E8FF;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:bold;&quot;&gt;PRIVADO · ACTIVO DÍA 1&lt;/span&gt;&lt;br&gt;&lt;b style=&quot;font-size:14px;color:#F8FAFC;&quot;&gt;AWS Budgets&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;color:#34D399;font-size:11px;&quot;&gt;Control y Alerta Presupuestaria&lt;/span&gt;&lt;div style=&quot;text-align:left;font-size:11px;color:#CBD5E1;margin-top:6px;&quot;&gt;• Alerta activa desde el Día 1 ($1.00 USD/mes)&lt;br&gt;• Gasto real SpookyThon 2026: $0.00 USD (Free Tier)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#131F36;strokeColor=#10B981;strokeWidth=1.8;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="860" y="520" width="350" height="130" as="geometry" />
+        </mxCell>
+
+        <!-- ARISTAS / CONEXIONES -->
+        <mxCell id="edge_user_amplify" value="① HTTPS GET (Web Estática)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#38BDF8;strokeWidth=2.5;fontColor=#E2E8F0;labelBackgroundColor=#09101F;startArrow=classic;endArrow=classic;" edge="1" parent="1" source="node_user" target="node_amplify">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_user_lambda" value="② HTTPS POST JSON + CORS (Monte Carlo)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#FB923C;strokeWidth=2.5;fontColor=#FDBA74;labelBackgroundColor=#09101F;startArrow=classic;endArrow=classic;exitX=1;exitY=0.75;entryX=0;entryY=0.5;" edge="1" parent="1" source="node_user" target="node_lambda">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="350" y="315" />
+              <mxPoint x="350" y="538" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="edge_user_fallback" value="Auto-Fallback sin red (~12 ms)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=#34D399;strokeWidth=2;fontColor=#6EE7B7;labelBackgroundColor=#09101F;endArrow=classic;" edge="1" parent="1" source="node_user" target="node_fallback">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge_lambda_cw" value="③ Logs / Métricas (Privado)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#C084FC;strokeWidth=2.2;fontColor=#E9D5FF;labelBackgroundColor=#09101F;endArrow=classic;" edge="1" parent="1" source="node_lambda" target="node_cloudwatch">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="820" y="510" />
+              <mxPoint x="820" y="420" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="edge_iam_lambda" value="Rol Mínimo Privilegio" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=#F87171;strokeWidth=1.8;fontColor=#FCA5A5;labelBackgroundColor=#09101F;endArrow=classic;" edge="1" parent="1" source="node_iam" target="node_lambda">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="815" y="255" />
+              <mxPoint x="815" y="465" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="edge_budgets_aws" value="④ Alerta $1.00 USD (Real: $0.00)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=#34D399;strokeWidth=2;fontColor=#6EE7B7;labelBackgroundColor=#09101F;endArrow=classic;" edge="1" parent="1" source="node_budgets" target="node_lambda">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
