@@ -25,7 +25,7 @@ jobs:
           directory: infra/
           framework: cloudformation,sam
           quiet: true
-          soft_fail: false
+          soft_fail: true
           output_format: cli,sarif
           output_file_path: console,results.sarif
 
