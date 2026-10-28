@@ -1,134 +1,155 @@
-# 💰 Declaración Detallada de Costos Operativos en AWS — Operación Contención Manta
+# 💰 Modelo de Costos AWS · Operación Contención Manta
 
-**Proyecto:** Operación Contención Manta (SpookyThon 2026 — Track B: *La Plaga Zombie*)  
-**Región de Referencia:** `us-east-2` (US East — Ohio)  
-**Arquitectura:** 100% Serverless y Efímera (`AWS Amplify Hosting` + `AWS Lambda Function URL Python 3.12` + `Amazon CloudWatch Logs` + `AWS Budgets`)
+> **Declaración de gasto real:** durante todo el hackathon SpookyThon 2026 el gasto acumulado en la cuenta AWS fue de **\$0.00 USD**, verificado con **AWS Budgets** activo desde el Día 1 (evidencia: [`budget.png`](budget.png)).
 
----
-
-## 1. Declaración Oficial de Gasto Real durante el Hackathon
-
-> **Gasto real incurrido durante la SpookyThon 2026: `$0.00 USD`**  
-> La totalidad del desarrollo, pruebas de carga Monte Carlo, despliegue del endpoint serverless y hospedaje web estático se ejecutó dentro de la **Capa Gratuita de AWS (*AWS Free Tier*) / *Sandbox Credits***, auditada de forma continua desde el **Día 1** mediante una alerta activa en **AWS Budgets** configurada con un umbral estricto de **`$1.00 USD/mes`** (ver evidencia verificable en [`docs/budget.png`](budget.png): consumo real `0,00 US$`, varianza disponible `100,00%`).
+Este documento estima el costo mensual de la arquitectura serverless para una carga de **10,000 corridas (simulaciones Monte Carlo) por mes**, con las fórmulas visibles para que cualquiera pueda verificar los números.
 
 ---
 
-## 2. Modelo Matemático de Costos Mensuales en AWS
+## 1. Supuestos de carga
 
-El costo mensual total de operación $C_{\text{total}}$ de la plataforma está gobernado por la suma de sus cuatro servicios sin servidores ociosos (*zero idle cost*):
+| Variable | Símbolo | Valor | Justificación |
+| :--- | :---: | :---: | :--- |
+| Simulaciones solicitadas por mes | $N_{sim}$ | `10,000` | Escenario de operación sostenida del COE cantonal + demos |
+| Workers Lambda por simulación (Fan-Out) | $W$ | `5` | `Promise.all` con 5 invocaciones concurrentes |
+| Invocación extra de auditoría (`record_audit`) | $A$ | `1` | Escritura del hash FNV-1a en DynamoDB |
+| Memoria asignada a Lambda | $M$ | `512 MB = 0.5 GB` | `MemorySize: 512` en [`infra/template.yaml`](../infra/template.yaml) |
+| Duración media por worker | $t_w$ | `0.8 s` | ~10 corridas × 3 estrategias × 60 días por worker |
+| Duración media de auditoría | $t_a$ | `0.1 s` | Un `PutItem` + `Query` |
+| Tamaño del dataset INEC/MSP en S3 | $D$ | `7.2 KB` | `manta_inec_msp_dataset.json` |
+| Lecturas S3 (solo en *cold start*, dataset cacheado en memoria) | $G_{S3}$ | `≤ 2,000` | Caché global `_CACHED_DATASET` reutilizada en invocaciones calientes |
+| Visitas al frontend por mes | $V$ | `2,000` | Jurado, autoridades y pruebas |
+| Peso del frontend servido | $P$ | `≈ 0.27 MB` | `index.html` + `styles.css` + `app.js` (librerías vía CDN pública) |
+| Log por invocación | $L$ | `≈ 1 KB` | Trazas de inicio/fin y métricas |
 
-$$
-C_{\text{total}} = C_{\text{Lambda}} + C_{\text{Amplify}} + C_{\text{CloudWatch}} + C_{\text{Budgets}}
-$$
+---
 
-### 2.1. Fórmula de Cómputo Serverless en AWS Lambda (`x86_64`)
+## 2. Cálculo por servicio
 
-Sea $N$ el número de simulaciones mensuales, $M_{\text{MB}}$ la memoria asignada en MB y $t_{\text{s}}$ la duración media por invocación en segundos. El consumo mensual en $\text{GB-s}$ se define como:
+### 2.1 AWS Lambda (Fan-Out 5 workers + auditoría)
 
-$$
-E_{\text{GB-s}} = N \times \left(\frac{M_{\text{MB}}}{1024}\right) \times t_{\text{s}}
-$$
-
-Aplicando las cuotas perpetuas de **AWS Free Tier** ($1{,}000{,}000$ solicitudes/mes y $400{,}000\text{ GB-s}$/mes) y las tarifas oficiales en `us-east-2` ($\text{USD } 0.20$ por millón de solicitudes y $\text{USD } 0.0000166667$ por $\text{GB-s}$; *Lambda Function URL* no tiene recargo fijo por hora):
-
-$$
-C_{\text{Lambda}} = \max\!\left(0,\; N - 1{,}000{,}000\right)\times \frac{0.20}{1{,}000{,}000} \;+\; \max\!\left(0,\; E_{\text{GB-s}} - 400{,}000\right)\times 0.0000166667
-$$
-
-### 2.2. Fórmula de Hosting Estático y CDN en AWS Amplify
-
-Sean $B_{\text{min}}$ los minutos mensuales de compilación CI/CD, $D_{\text{GB}}$ los GB de transferencia saliente por HTTPS y $S_{\text{GB}}$ el almacenamiento en CDN (tarifas estándar tras Free Tier de 12 meses: $\text{USD } 0.01/\text{min}$, $\text{USD } 0.15/\text{GB}$ transferido y $\text{USD } 0.023/\text{GB}$ almacenado):
+**Invocaciones:**
 
 $$
-C_{\text{Amplify}} = \max\!\left(0,\; B_{\text{min}} - 1{,}000\right)\times 0.01 \;+\; \max\!\left(0,\; D_{\text{GB}} - 15\right)\times 0.15 \;+\; \max\!\left(0,\; S_{\text{GB}} - 5\right)\times 0.023
+R_{\lambda} = N_{sim} \times (W + A) = 10{,}000 \times (5 + 1) = 60{,}000 \ \text{solicitudes/mes}
 $$
 
-### 2.3. Fórmula de Observabilidad Privada en Amazon CloudWatch Logs
-
-Sea $L_{\text{GB}}$ el volumen mensual de logs ingeridos ($\approx 0.35\text{ KB}$ por invocación para líneas `START`, `END` y `REPORT`), con una cuota perpetua gratuita (*Always Free*) de $5\text{ GB/mes}$ y tarifa excedente de $\text{USD } 0.50/\text{GB}$:
+**Cómputo (GB-segundo):**
 
 $$
-C_{\text{CloudWatch}} = \max\!\left(0,\; L_{\text{GB}} - 5\right)\times 0.50
+C_{\lambda} = N_{sim} \cdot W \cdot t_w \cdot M + N_{sim} \cdot A \cdot t_a \cdot M
+$$
+
+$$
+C_{\lambda} = 10{,}000 \cdot 5 \cdot 0.8 \cdot 0.5 + 10{,}000 \cdot 1 \cdot 0.1 \cdot 0.5 = 20{,}000 + 500 = 20{,}500 \ \text{GB-s}
+$$
+
+| Concepto | Uso | Capa gratuita mensual (permanente) | % consumido | Costo con Free Tier |
+| :--- | :---: | :---: | :---: | :---: |
+| Solicitudes | `60,000` | `1,000,000` | `6.0 %` | **\$0.00** |
+| Cómputo | `20,500 GB-s` | `400,000 GB-s` | `5.1 %` | **\$0.00** |
+| Function URL | incluida | sin cargo adicional | — | **\$0.00** |
+
+*Referencia sin capa gratuita:* $60{,}000 \times \frac{\$0.20}{10^6} + 20{,}500 \times \$0.0000166667 = \$0.012 + \$0.342 = \$0.35$/mes.
+
+### 2.2 Amazon S3 (bucket privado del dataset)
+
+$$
+\text{Almacenamiento} = 7.2\ \text{KB} \approx 0.0000072\ \text{GB} \qquad \text{GET} = G_{S3} \le 2{,}000
+$$
+
+| Concepto | Uso | Costo unitario | Costo |
+| :--- | :---: | :---: | :---: |
+| Almacenamiento Standard | `0.0000072 GB` | \$0.023 / GB-mes | \$0.0000002 |
+| Solicitudes GET | `2,000` | \$0.0004 / 1,000 | \$0.0008 |
+| **Total S3** | | | **\$0.00** (redondeado) |
+
+### 2.3 Amazon DynamoDB (`SpookyThonSimulations`, On-Demand)
+
+Cada simulación escribe **1 ítem < 1 KB** (1 WRU) y consulta el historial (lectura eventual ≤ 4 KB = 0.5 RRU):
+
+$$
+\text{WRU} = 10{,}000 \times 1 = 10{,}000 \qquad \text{RRU} = 10{,}000 \times 0.5 = 5{,}000
+$$
+
+$$
+\text{Costo} = 10{,}000 \times \frac{\$0.625}{10^6} + 5{,}000 \times \frac{\$0.125}{10^6} = \$0.00625 + \$0.000625 \approx \$0.007
+$$
+
+| Concepto | Uso | Capa gratuita | Costo |
+| :--- | :---: | :---: | :---: |
+| Almacenamiento | `≈ 3 MB` (10k ítems × 300 B) | `25 GB` permanentes | **\$0.00** |
+| Escrituras / lecturas On-Demand | `10k WRU / 5k RRU` | — | **≈ \$0.007** (menos de 1 centavo) |
+
+> [!NOTE]
+> El modo **On-Demand** factura fracciones de centavo (≈ \$0.007/mes) que se absorben con los créditos de la capa gratuita. Si se requiere estrictamente \$0.00, basta con cambiar a modo **Provisioned (5 WCU / 5 RCU)**, que cae dentro de las 25 WCU/RCU gratuitas permanentes y soporta holgadamente 10,000 escrituras al mes (≈ 0.004 escrituras/segundo promedio).
+
+### 2.4 Amazon CloudWatch Logs
+
+$$
+\text{Ingesta} = R_{\lambda} \times L = 60{,}000 \times 1\ \text{KB} \approx 0.06\ \text{GB/mes}
+$$
+
+| Concepto | Uso | Capa gratuita | Costo |
+| :--- | :---: | :---: | :---: |
+| Ingesta + almacenamiento de logs | `0.06 GB` | `5 GB/mes` | **\$0.00** |
+| Métricas estándar de Lambda | incluidas | gratuitas | **\$0.00** |
+
+### 2.5 AWS Amplify Hosting
+
+$$
+\text{Transferencia} = V \times P = 2{,}000 \times 0.27\ \text{MB} = 540\ \text{MB} \approx 0.54\ \text{GB/mes}
+$$
+
+| Concepto | Uso | Capa gratuita | Costo |
+| :--- | :---: | :---: | :---: |
+| Datos servidos (CDN) | `0.54 GB` | `15 GB/mes` | **\$0.00** |
+| Almacenamiento de artefactos | `< 1 MB` | `5 GB` | **\$0.00** |
+| Minutos de build | `0` (HTML/CSS/JS sin build) | `1,000 min/mes` | **\$0.00** |
+
+### 2.6 Servicios de gobernanza
+
+| Servicio | Uso | Costo |
+| :--- | :--- | :---: |
+| AWS Budgets | 1 presupuesto con alerta de costo (los 2 primeros son gratuitos) | **\$0.00** |
+| IAM (roles de mínimo privilegio) | Sin cargo | **\$0.00** |
+| Transferencia de datos de salida (respuestas JSON Lambda) | `≈ 3 GB/mes` vs. `100 GB/mes` gratuitos | **\$0.00** |
+
+---
+
+## 3. Resumen mensual (10,000 corridas/mes)
+
+| Servicio | Uso mensual | Con AWS Free Tier | Sin Free Tier (referencia) |
+| :--- | :--- | :---: | :---: |
+| AWS Amplify Hosting | 0.54 GB servidos | **\$0.00** | \$0.08 |
+| AWS Lambda (Fan-Out) | 60,000 solicitudes · 20,500 GB-s | **\$0.00** | \$0.35 |
+| Amazon S3 (privado) | 7.2 KB · ≤ 2,000 GET | **\$0.00** | \$0.001 |
+| Amazon DynamoDB | 10k WRU · 5k RRU · 3 MB | **\$0.00**\* | \$0.007 |
+| Amazon CloudWatch Logs | 0.06 GB | **\$0.00** | \$0.03 |
+| AWS Budgets | 1 alerta | **\$0.00** | \$0.00 |
+| **TOTAL** | | **\$0.00 / mes** | **≈ \$0.47 / mes** |
+
+\* Con modo Provisioned 5/5 o absorbido por créditos de la capa gratuita (ver nota 2.3).
+
+$$
+\text{Costo total con Free Tier} = \$0.00 \qquad\qquad \text{Costo por simulación sin Free Tier} = \frac{\$0.47}{10{,}000} \approx \$0.000047
 $$
 
 ---
 
-## 3. Cálculo Paso a Paso: Escenario Estándar (`10,000` Simulaciones / Mes)
+## 4. Consideraciones honestas
 
-Parámetros operativos de referencia para el **COE Cantonal de Manta** y evaluación ciudadana/técnica:
-- **Simulaciones mensuales ($N$):** `10,000` ejecuciones Monte Carlo/mes
-- **Memoria AWS Lambda ($M_{\text{MB}}$):** `512 MB` (`0.5 GB`)
-- **Duración promedio ($t_{\text{s}}$):** `500 ms` (`0.5 s`)
-- **Peso del frontend estático comprimido (Brotli/Gzip):** `~65 KB` por sesión inicial (`~0.65 GB/mes` para 10,000 visitas; `2 min/mes` de despliegue)
-- **Ingesta de logs en CloudWatch ($L_{\text{GB}}$):** $10{,}000 \times 0.35\text{ KB} \approx 3.5\text{ MB} \approx 0.0034\text{ GB/mes}$
-
-### Sustitución Matemática Exacta:
-
-1. **Consumo de cómputo en AWS Lambda:**
-
-$$
-E_{\text{GB-s}} = 10{,}000 \times \left(\frac{512}{1024}\right) \times 0.5 = 10{,}000 \times 0.5 \times 0.5 = 2{,}500\text{ GB-s / mes}
-$$
-
-2. **Evaluación contra la Capa Gratuita de AWS:**
-   - **Solicitudes Lambda:** $10{,}000 \le 1{,}000{,}000$ (`1.00%` de la cuota Always Free) $\implies \mathbf{\text{USD } 0.00}$
-   - **Cómputo Lambda:** $2{,}500\text{ GB-s} \le 400{,}000\text{ GB-s}$ (`0.625%` de la cuota Always Free) $\implies \mathbf{\text{USD } 0.00}$
-   - **AWS Amplify Hosting:** $0.65\text{ GB} \le 15\text{ GB}$ (`4.33%` de la cuota Free Tier) y $2\text{ min} \le 1{,}000\text{ min}$ $\implies \mathbf{\text{USD } 0.00}$
-   - **Amazon CloudWatch Logs:** $0.0034\text{ GB} \le 5\text{ GB}$ (`0.07%` de la cuota Always Free) $\implies \mathbf{\text{USD } 0.00}$
-   - **AWS Budgets:** `1` presupuesto mensual estándar con alertas por correo $\implies \mathbf{\text{USD } 0.00}$
-
-$$
-C_{\text{total (Estándar con Free Tier)}} = 0.00 + 0.00 + 0.00 + 0.00 = \mathbf{\text{USD } 0.00 / \text{mes}}
-$$
-
-*(Nota de transparencia: Incluso si una cuenta empresarial ya hubiese agotado su Capa Gratuita de 12 meses, estas mismas 10,000 simulaciones costarían apenas $\text{USD } 0.002 + \text{USD } 0.0417 = \text{USD } 0.0437$ en Lambda + $\text{USD } 0.118$ en Amplify + $\text{USD } 0.002$ en CloudWatch = **`$0.16 USD/mes`**).*
+1. **Perfil endurecido del template SAM:** [`infra/template.yaml`](../infra/template.yaml) define una **clave KMS administrada por el cliente** (con rotación) para cifrar S3, DynamoDB y la cola DLQ. Una CMK cuesta **\$1.00/mes** + \$0.03 por cada 10,000 solicitudes de API. Para mantener \$0.00, se pueden usar claves administradas por AWS (SSE-S3 / clave propiedad de AWS en DynamoDB), que no tienen costo.
+2. **Retención de logs:** el template fija `RetentionInDays: 365`. Con 0.06 GB/mes el almacenamiento acumulado anual (~0.7 GB) sigue dentro de los 5 GB gratuitos.
+3. **Capa gratuita de AWS:** desde julio de 2025 las cuentas nuevas reciben créditos en lugar de algunas capas gratuitas de 12 meses (p. ej. S3). Los límites permanentes de Lambda (1M solicitudes / 400k GB-s), DynamoDB (25 GB) y CloudWatch (5 GB) siguen vigentes. Los centavos residuales de S3 y DynamoDB se cubren con esos créditos.
+4. **Protección contra Denial-of-Wallet:** `ReservedConcurrentExecutions: 25`, timeout de 20 s y validación de entradas en el servidor (`runs ≤ 500`, `days ≤ 365`, `budget ≤ 2,000,000`) ponen un techo físico al gasto incluso ante abuso del endpoint público.
 
 ---
 
-## 4. Escenario de Tráfico Masivo / Emergencia Regional SIN Capa Gratuita (`~$1.25 USD/mes`)
+## 5. Gasto real del hackathon
 
-Para demostrar la viabilidad financiera a escala real sin depender de ninguna subvención ni Capa Gratuita (*0% Free Tier*), proyectamos una **emergencia sanitaria provincial masiva** con **150,000 simulaciones Monte Carlo al mes** (`5,000` corridas diarias) y `3.6 GB/mes` de tráfico web servido por CDN:
+| Periodo | Servicios utilizados | Gasto facturado |
+| :--- | :--- | :---: |
+| SpookyThon 2026 (desarrollo + pruebas + demo) | Amplify, Lambda, S3, DynamoDB, CloudWatch, Budgets | **\$0.00 USD** |
 
-- **AWS Lambda (`150,000` invocaciones × `0.5 GB` × `0.5 s` = `37,500 GB-s`):**
-
-$$
-C_{\text{Lambda (Sin Free Tier)}} = \left(150{,}000 \times \frac{0.20}{10^6}\right) + \left(37{,}500 \times 0.0000166667\right) = 0.0300 + 0.6250 = \text{USD } 0.6550
-$$
-
-- **AWS Amplify Hosting (`3.6 GB` transferencia CDN + `4 min` build CI/CD):**
-
-$$
-C_{\text{Amplify (Sin Free Tier)}} = \left(3.6 \times 0.15\right) + \left(4 \times 0.01\right) + 0.002 = 0.5400 + 0.0420 = \text{USD } 0.5820
-$$
-
-- **Amazon CloudWatch Logs (`0.05 GB` ingesta de trazas):**
-
-$$
-C_{\text{CloudWatch (Sin Free Tier)}} = 0.05 \times 0.50 = \text{USD } 0.0250
-$$
-
-- **Costo Total en Tráfico Masivo sin Capa Gratuita:**
-
-$$
-C_{\text{total (Tráfico Masivo)}} = 0.6550 + 0.5820 + 0.0250 = \text{USD } 1.2620 \approx \mathbf{\text{USD } 1.25 / \text{mes}}
-$$
-
----
-
-## 5. Tabla Comparativa Consolidada de Costos
-
-| Servicio AWS | Métrica Mensual Base (`10k` sims) | Cuota Capa Gratuita AWS | Costo Estándar (Con Free Tier) | Escenario Masivo (`150k` sims, **Sin** Free Tier) | Gasto Real Hackathon |
-| :--- | :--- | :--- | :---: | :---: | :---: |
-| **AWS Lambda + Function URL** | `10,000` req · `2,500 GB-s` (`512 MB`, `500 ms`) | `1M` req + `400,000 GB-s` (*Always Free*) | **`$0.00 USD`** | `$0.66 USD` | **`$0.00 USD`** |
-| **AWS Amplify Hosting** | `~0.65 GB` CDN · `2 min` build | `15 GB` salida + `1,000 min` (*12m Free*) | **`$0.00 USD`** | `$0.58 USD` | **`$0.00 USD`** |
-| **Amazon CloudWatch Logs** | `~0.0034 GB` logs privados | `5 GB` ingesta + `5 GB` archivo (*Always Free*) | **`$0.00 USD`** | `$0.03 USD` | **`$0.00 USD`** |
-| **AWS Budgets** | `1` presupuesto activo Día 1 (`$1.00 USD`) | Presupuestos informativos estándar incluidos | **`$0.00 USD`** | `$0.00 USD` | **`$0.00 USD`** |
-| **TOTAL MENSUAL** | **Operación 24/7 sin servidores ociosos** | **Cubierto al 100%** | **`$0.00 USD / mes`** | **`~$1.25 USD / mes`** | **`$0.00 USD`** |
-
----
-
-## 6. Mecanismos de Protección Financiera Activos
-
-1. **Alerta desde el Día 1 (`AWS Budgets`):** Presupuesto mensual fijado en **`$1.00 USD`** con notificación temprana para impedir cualquier cargo inesperado.
-2. **Acotamiento Estricto de Cómputo (`parse_scenario_payload`):** En [`infra/lambda_simulador.py`](../infra/lambda_simulador.py), los parámetros recibidos por JSON se acotan servidor adentro (`runs <= 300`, `days <= 365`), evitando que peticiones malformadas consuman $\text{GB-s}$ excesivos.
-3. **Cero Costo por Inactividad (*Scale-to-Zero*):** Al prescindir de instancias EC2, NAT Gateways, Application Load Balancers o bases de datos RDS aprovisionadas, cuando nadie ejecuta una simulación el costo por hora es exactamente **`$0.00 USD`**.
+Evidencia: alerta de **AWS Budgets** configurada desde el Día 1 → [`docs/budget.png`](budget.png).

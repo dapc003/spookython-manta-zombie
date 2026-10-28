@@ -129,8 +129,8 @@
       name: "San Mateo",
       officialName: "San Mateo",
       shortName: "San Mateo",
-      lat: -0.9885,
-      lng: -80.8092,
+      lat: -0.9685,
+      lng: -80.7620,
       population: 7000,
       inecRefPop: 12400,
       aedesBreteauIndex: 14.1,
@@ -290,14 +290,14 @@
     const mean = n * prob;
     let res = 0;
     if (mean < 14) {
-      const q = 1 - prob;
+      const q = Math.max(0.000001, 1 - prob);
       let term = Math.exp(n * Math.log(q));
       let cdf = term;
       const ratio = prob / q;
       let k = 0;
       const limit = Math.min(n, Math.floor(mean + 10 * Math.sqrt(mean + 1)) + 12);
       while (u1 > cdf && k < limit) {
-        term *= ((n - k) * ratio) / (k + 1);
+        term *= ((n - k) * ratio) / Math.max(1, k + 1);
         cdf += term;
         k++;
       }
@@ -323,7 +323,8 @@
       let remTot = totalPop;
       let remSucc = successPop;
       for (let i = 0; i < draws; i++) {
-        if (rng() < remSucc / remTot) {
+        if (remTot <= 0) break;
+        if (rng() < remSucc / Math.max(1, remTot)) {
           chosen++;
           remSucc--;
         }
@@ -332,9 +333,9 @@
       return Math.max(minPossible, Math.min(maxPossible, chosen));
     }
 
-    const p = successPop / totalPop;
+    const p = successPop / Math.max(1, totalPop);
     const mean = draws * p;
-    const fpc = totalPop > 1 ? (totalPop - draws) / (totalPop - 1) : 0;
+    const fpc = totalPop > 1 ? (totalPop - draws) / Math.max(1, totalPop - 1) : 0;
     const variance = Math.max(0, draws * p * (1 - p) * fpc);
     const u1 = Math.max(1e-12, rng());
     const u2 = rng();
@@ -355,7 +356,7 @@
       return t * (t - 13.5) * Math.sqrt(Math.max(0.01, 39.0 - t));
     }
 
-    const phiTemp = briere(tEff) / briere(26.5);
+    const phiTemp = briere(tEff) / Math.max(0.0001, briere(26.5));
     const phiRh = Math.max(0.75, Math.min(1.25, 1.0 + 0.0045 * (rhEff - 76.0)));
     const phiRain = 1.0 + Math.min(0.28, 0.035 * pEff);
     const multiplier = phiTemp * phiRh * phiRain;
@@ -377,6 +378,7 @@
     if (S[nodeIndex] <= 0) return 0;
     const node = MANTA_NODES[nodeIndex];
     const deg = node.neighbors.length;
+    const pop = Math.max(1, node.population || 0);
 
     let neighborInfected = 0;
     let neighborActiveHub = false;
@@ -389,17 +391,18 @@
       }
     }
 
-    const healthyRatio = S[nodeIndex] / node.population;
+    const healthyRatio = S[nodeIndex] / pop;
     const baseScore = deg * neighborInfected * healthyRatio;
 
     const localActiveLoad = I[nodeIndex] + E[nodeIndex];
-    const localPrevalence = localActiveLoad / node.population;
+    const localPrevalence = localActiveLoad / pop;
 
     let hasHealthyPerimeter = false;
     if (localActiveLoad >= 6) {
       for (let m = 0; m < deg; m++) {
         const nb = node.neighbors[m];
-        if (S[nb] / MANTA_NODES[nb].population > 0.35 && I[nb] + E[nb] < localActiveLoad) {
+        const nbPop = Math.max(1, MANTA_NODES[nb].population || 0);
+        if (S[nb] / nbPop > 0.35 && I[nb] + E[nb] < localActiveLoad) {
           hasHealthyPerimeter = true;
           break;
         }
@@ -419,7 +422,8 @@
       ringMultiplier = 2.35;
     }
 
-    return baseScore * ringMultiplier;
+    const finalScore = baseScore * ringMultiplier;
+    return Number.isFinite(finalScore) ? finalScore : 0;
   }
 
   function simulateSingleTrajectory(runSeed, strategy, config, recordNodeHistory) {
@@ -634,7 +638,7 @@
               for (let m = 0; m < deg; m++) {
                 neighZ += I[MANTA_NODES[k].neighbors[m]];
               }
-              const sFrac = S[k] / MANTA_NODES[k].population;
+              const sFrac = S[k] / Math.max(1, MANTA_NODES[k].population);
 
               let cScore = 0;
               if (I[k] >= 4 || (k === pz && I[k] + E[k] >= 3)) {
@@ -675,7 +679,7 @@
               const activeLoad = I[k] + 0.5 * E[k];
               if (activeLoad < 3.5) continue;
 
-              const sFrac = S[k] / MANTA_NODES[k].population;
+              const sFrac = S[k] / Math.max(1, MANTA_NODES[k].population);
               const deg = MANTA_NODES[k].neighbors.length;
               const vectorWeight = isDengue ? MANTA_NODES[k].aedesBreteauIndex / 14.0 : 1.0;
               const fScore = activeLoad * sFrac * (1 + 0.35 * deg) * vectorWeight;
@@ -742,7 +746,7 @@
                 const fb =
                   MANTA_NODES[k].neighbors.length *
                   isRingNb *
-                  (elig / MANTA_NODES[k].population);
+                  (elig / Math.max(1, MANTA_NODES[k].population));
                 if (fb > bestScore) {
                   bestScore = fb;
                   bestNode = k;
@@ -786,7 +790,7 @@
 
         const localFumModifier = fumigationDaysLeft[k] > 0 ? FUMIGATION_LOCAL_MULT : 1.0;
         const breteauMod = isDengue ? 0.85 + 0.30 * (node.aedesBreteauIndex / 15.0) : 1.0;
-        const localForce = localFumModifier * breteauMod * beta * (I[k] / node.population);
+        const localForce = localFumModifier * breteauMod * beta * (I[k] / Math.max(1, node.population));
 
         const hubTrafficFactor = node.neighbors.length / 3.0;
         let neighborForce = 0;
@@ -804,7 +808,7 @@
             corridorMod *
             edgeCoupling *
             beta *
-            (I[nbIdx] / MANTA_NODES[nbIdx].population);
+            (I[nbIdx] / Math.max(1, MANTA_NODES[nbIdx].population));
         }
 
         const totalLambda = (localForce + neighborForce) * contactDispersion;
@@ -817,7 +821,7 @@
 
       for (let k = 0; k < numNodes; k++) {
         if (S[k] > 0 && newExposed[k] > 0 && S_vacFailed[k] > 0) {
-          const bittenFromFailed = Math.round((newExposed[k] * S_vacFailed[k]) / S[k]);
+          const bittenFromFailed = Math.round((newExposed[k] * S_vacFailed[k]) / Math.max(1, S[k]));
           S_vacFailed[k] = Math.max(0, Math.min(S[k] - newExposed[k], S_vacFailed[k] - bittenFromFailed));
         }
 
@@ -859,16 +863,17 @@
     let min = Infinity;
     let max = -Infinity;
     let sum = 0;
-    for (let i = 0; i < arr.length; i++) {
-      const v = arr[i];
+    const len = arr ? arr.length : 0;
+    for (let i = 0; i < len; i++) {
+      const v = Number.isFinite(arr[i]) ? arr[i] : 0;
       sum += v;
       if (v < min) min = v;
       if (v > max) max = v;
     }
     return {
-      mean: arr.length ? sum / arr.length : 0,
-      min: arr.length ? min : 0,
-      max: arr.length ? max : 0
+      mean: len > 0 ? (sum / Math.max(1, len)) || 0 : 0,
+      min: len > 0 && min !== Infinity ? min : 0,
+      max: len > 0 && max !== -Infinity ? max : 0
     };
   }
 
@@ -982,28 +987,29 @@
     const summary = {};
     for (const key of strategyKeys) {
       const bucket = agg[key];
+      const safeRuns = Math.max(1, runs);
       for (let d = 0; d <= days; d++) {
-        bucket.dailyMeanS[d] /= runs;
-        bucket.dailyMeanE[d] /= runs;
-        bucket.dailyMeanI[d] /= runs;
-        bucket.dailyMeanR[d] /= runs;
-        bucket.dailyMeanCumInf[d] /= runs;
-        bucket.dailyMeanProtected[d] /= runs;
+        bucket.dailyMeanS[d] /= safeRuns;
+        bucket.dailyMeanE[d] /= safeRuns;
+        bucket.dailyMeanI[d] /= safeRuns;
+        bucket.dailyMeanR[d] /= safeRuns;
+        bucket.dailyMeanCumInf[d] /= safeRuns;
+        bucket.dailyMeanProtected[d] /= safeRuns;
       }
 
       summary[key] = {
         infectedStats: computeStats(bucket.infectedArr),
         savedStats: computeStats(bucket.savedArr),
-        meanDoses: bucket.dosesSum / runs,
-        meanImmunized: bucket.immunizedSum / runs,
-        meanFumigations: bucket.fumigationsSum / runs,
-        meanClosures: bucket.closuresSum / runs,
-        meanSpent: bucket.spentSum / runs,
-        violations: bucket.violationsSum,
-        nodeMeanVac: Array.from(bucket.nodeVacSum, (v) => v / runs),
-        nodeMeanFum: Array.from(bucket.nodeFumSum, (v) => v / runs),
-        nodeMeanClose: Array.from(bucket.nodeCloseSum, (v) => v / runs),
-        nodeMeanInf: Array.from(bucket.nodeInfSum, (v) => v / runs),
+        meanDoses: (bucket.dosesSum / safeRuns) || 0,
+        meanImmunized: (bucket.immunizedSum / safeRuns) || 0,
+        meanFumigations: (bucket.fumigationsSum / safeRuns) || 0,
+        meanClosures: (bucket.closuresSum / safeRuns) || 0,
+        meanSpent: (bucket.spentSum / safeRuns) || 0,
+        violations: bucket.violationsSum || 0,
+        nodeMeanVac: Array.from(bucket.nodeVacSum, (v) => (v / safeRuns) || 0),
+        nodeMeanFum: Array.from(bucket.nodeFumSum, (v) => (v / safeRuns) || 0),
+        nodeMeanClose: Array.from(bucket.nodeCloseSum, (v) => (v / safeRuns) || 0),
+        nodeMeanInf: Array.from(bucket.nodeInfSum, (v) => (v / safeRuns) || 0),
         series: {
           S: Array.from(bucket.dailyMeanS),
           E: Array.from(bucket.dailyMeanE),
@@ -1064,20 +1070,32 @@
 
   let currentMantaWeather = {
     live: false,
-    temperatureC: 26.8,
-    humidityPct: 78,
+    temperatureC: 26.0,
+    humidityPct: 78.0,
     precipitationMm: 0.0,
-    source: "Climatología Manta"
+    source: "offline"
   };
 
   let comparisonChartInstance = null;
   let seirChartInstance = null;
 
-  // Instancias de Leaflet (Mapa Geoespacial Real de Manta)
+  // Instancias de Leaflet (Mapa Geoespacial Real de Manta: Esri Calles Oscuro + Esri Satélite Híbrido)
   let leafletMap = null;
+  let leafletStreetLayer = null;
+  let leafletSatelliteLayer = null;
+  let leafletSatelliteLabelsLayer = null;
+  let activeBasemapMode = "street"; // "street" (Esri Calles Oscuro) | "satellite" (Esri Satélite Híbrido)
+  let allNodesBounds = null;
+  let mapResizeObserver = null;
+  let mapResizeRaf = null;
+  let lastObservedMapSize = "";
   let leafletEdgeLines = [];
   let leafletHeatCircles = [];
   let leafletNodeMarkers = [];
+  let activeCloudOverlayCount = 0;
+  let chartResizeObserver = null;
+  let chartResizeRaf = null;
+  let isInitialBootstrap = true;
 
   const dom = {
     // Modo y Clima Open-Meteo
@@ -1114,6 +1132,7 @@
 
     // Formulario Principal
     form: document.getElementById("simForm"),
+    btnRunSim: document.getElementById("btnRunSim"),
     inputSeed: document.getElementById("inputSeed"),
     rangeRuns: document.getElementById("rangeRuns"),
     inputRuns: document.getElementById("inputRuns"),
@@ -1209,6 +1228,10 @@
     geoMapContainer: document.getElementById("geoMapContainer"),
     topoMapContainer: document.getElementById("topoMapContainer"),
     mantaGeoMap: document.getElementById("mantaGeoMap"),
+    btnCenterMapNodes: document.getElementById("btnCenterMapNodes"),
+    btnToggleBasemap: document.getElementById("btnToggleBasemap"),
+    btnFullscreenMap: document.getElementById("btnFullscreenMap"),
+    activeBasemapBadge: document.getElementById("activeBasemapBadge"),
 
     mapDescMaxDay: document.getElementById("mapDescMaxDay"),
     selectMapStrategy: document.getElementById("selectMapStrategy"),
@@ -1247,8 +1270,129 @@
 
     dynamoStorageBadge: document.getElementById("dynamoStorageBadge"),
     btnRefreshDynamo: document.getElementById("btnRefreshDynamo"),
-    dynamoAuditBody: document.getElementById("dynamoAuditBody")
+    dynamoAuditBody: document.getElementById("dynamoAuditBody"),
+
+    // Overlay de Carga Cloud AWS y Sistema de Notificaciones Toast
+    cloudLoadingOverlay: document.getElementById("cloudLoadingOverlay"),
+    cloudLoadingSubtext: document.getElementById("cloudLoadingSubtext"),
+    toastContainer: document.getElementById("toastContainer")
   };
+
+  function setCloudLoadingOverlay(visible, subtext) {
+    if (!dom.cloudLoadingOverlay) return;
+    if (visible) {
+      activeCloudOverlayCount++;
+      if (dom.cloudLoadingSubtext && subtext) {
+        dom.cloudLoadingSubtext.textContent = subtext;
+      }
+      dom.cloudLoadingOverlay.classList.remove("hidden");
+    } else {
+      activeCloudOverlayCount = Math.max(0, activeCloudOverlayCount - 1);
+      if (activeCloudOverlayCount === 0) {
+        dom.cloudLoadingOverlay.classList.add("hidden");
+      }
+    }
+  }
+
+  let activeBusyOperations = 0;
+
+  function setOperationButtonsBusy(busy) {
+    if (busy) {
+      activeBusyOperations++;
+      if (dom.btnRunSim) {
+        dom.btnRunSim.disabled = true;
+        dom.btnRunSim.innerHTML = `<span class="btn-spinner" aria-hidden="true">⏳</span> Calculando en AWS...`;
+      }
+      if (dom.btnAutoOptimize) {
+        dom.btnAutoOptimize.disabled = true;
+        dom.btnAutoOptimize.innerHTML = `<span class="btn-spinner" aria-hidden="true">⏳</span> Calculando en AWS...`;
+      }
+    } else {
+      activeBusyOperations = Math.max(0, activeBusyOperations - 1);
+      if (activeBusyOperations === 0) {
+        if (dom.btnRunSim) {
+          dom.btnRunSim.disabled = false;
+          dom.btnRunSim.innerHTML = `⚡ Ejecutar Operación Monte Carlo`;
+        }
+        if (dom.btnAutoOptimize) {
+          dom.btnAutoOptimize.disabled = false;
+          dom.btnAutoOptimize.innerHTML = `🧠 Auto-Optimizar Presupuesto y Estrategia`;
+        }
+      }
+    }
+  }
+
+  function showToast(messageHtml, variant = "success", durationMs = 3000) {
+    if (!dom.toastContainer) return;
+
+    while (dom.toastContainer.children.length >= 3) {
+      dom.toastContainer.removeChild(dom.toastContainer.firstElementChild);
+    }
+
+    const icons = {
+      success: "✓",
+      info: "⚡",
+      warn: "⚠️"
+    };
+
+    const toast = document.createElement("div");
+    toast.className = `toast-item toast-${variant}`;
+    toast.setAttribute("role", "status");
+    toast.innerHTML = `
+      <span class="toast-icon" aria-hidden="true">${icons[variant] || "✅"}</span>
+      <span class="toast-body">${messageHtml}</span>
+      <span class="toast-progress" style="animation-duration: ${durationMs}ms;"></span>
+    `;
+
+    dom.toastContainer.appendChild(toast);
+
+    const fadeDelay = Math.max(200, durationMs - 260);
+    setTimeout(() => {
+      toast.classList.add("toast-leaving");
+    }, fadeDelay);
+
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+    }, durationMs);
+  }
+
+  function scheduleDynamicChartsAndMapResize() {
+    if (chartResizeRaf !== null) {
+      cancelAnimationFrame(chartResizeRaf);
+    }
+    chartResizeRaf = requestAnimationFrame(() => {
+      chartResizeRaf = null;
+      if (comparisonChartInstance && typeof comparisonChartInstance.resize === "function") {
+        comparisonChartInstance.resize();
+      }
+      if (seirChartInstance && typeof seirChartInstance.resize === "function") {
+        seirChartInstance.resize();
+      } else if (typeof window.Chart === "undefined" && currentResult) {
+        renderCharts(currentResult);
+      }
+      if (leafletMap && activeMapView === "geo") {
+        recenterAllNodesOnMap();
+      }
+    });
+  }
+
+  function initResponsiveChartsAndLayoutObserver() {
+    window.addEventListener("resize", scheduleDynamicChartsAndMapResize, { passive: true });
+    window.addEventListener("orientationchange", () => {
+      setTimeout(scheduleDynamicChartsAndMapResize, 120);
+    });
+
+    if (typeof window.ResizeObserver !== "undefined") {
+      chartResizeObserver = new window.ResizeObserver(() => {
+        scheduleDynamicChartsAndMapResize();
+      });
+      document.querySelectorAll(".chart-canvas-wrap").forEach((wrap) => {
+        chartResizeObserver.observe(wrap);
+      });
+    }
+  }
 
   function populatePatientZeroSelect() {
     dom.selectPatientZero.innerHTML = "";
@@ -1264,17 +1408,55 @@
   }
 
   function syncDualControl(rangeEl, numEl, outEl, formatter) {
+    if (!rangeEl || !numEl) return;
+
+    const getMin = () => {
+      const rMin = parseFloat(rangeEl.min);
+      const nMin = parseFloat(numEl.min);
+      if (Number.isFinite(rMin)) return rMin;
+      if (Number.isFinite(nMin)) return nMin;
+      return 0;
+    };
+    const getMax = () => {
+      const rMax = parseFloat(rangeEl.max);
+      const nMax = parseFloat(numEl.max);
+      if (Number.isFinite(rMax)) return rMax;
+      if (Number.isFinite(nMax)) return nMax;
+      return 100;
+    };
+
+    const clamp = (val) => {
+      const min = getMin();
+      const max = getMax();
+      const n = parseFloat(val);
+      if (!Number.isFinite(n)) return min;
+      return Math.max(min, Math.min(max, n));
+    };
+
     rangeEl.addEventListener("input", () => {
-      numEl.value = rangeEl.value;
-      if (outEl) outEl.textContent = formatter(Number(rangeEl.value));
+      const clamped = clamp(rangeEl.value);
+      numEl.value = String(clamped);
+      if (outEl) outEl.textContent = formatter(clamped);
     });
+
     numEl.addEventListener("input", () => {
-      const v = Number(numEl.value);
-      if (!Number.isNaN(v)) {
-        rangeEl.value = String(Math.max(Number(rangeEl.min), Math.min(Number(rangeEl.max), v)));
-        if (outEl) outEl.textContent = formatter(v);
+      const raw = parseFloat(numEl.value);
+      if (Number.isFinite(raw)) {
+        const clamped = clamp(raw);
+        rangeEl.value = String(clamped);
+        if (outEl) outEl.textContent = formatter(clamped);
       }
     });
+
+    const enforceStrictBounds = () => {
+      const clamped = clamp(numEl.value);
+      numEl.value = String(clamped);
+      rangeEl.value = String(clamped);
+      if (outEl) outEl.textContent = formatter(clamped);
+    };
+
+    numEl.addEventListener("change", enforceStrictBounds);
+    numEl.addEventListener("blur", enforceStrictBounds);
   }
 
   function readConfigFromForm() {
@@ -1293,9 +1475,9 @@
 
     const config = {
       mode: activeEpiMode,
-      seed: Number.isFinite(seedRaw) ? Math.max(0, seedRaw) : DEFAULT_CONFIG.seed,
+      seed: Number.isFinite(seedRaw) ? Math.max(0, Math.min(2147483647, seedRaw)) : DEFAULT_CONFIG.seed,
       runs: Number.isFinite(runsRaw) ? Math.max(1, Math.min(500, runsRaw)) : DEFAULT_CONFIG.runs,
-      days: Number.isFinite(daysRaw) ? Math.max(10, Math.min(365, daysRaw)) : DEFAULT_CONFIG.days,
+      days: Number.isFinite(daysRaw) ? Math.max(10, Math.min(150, daysRaw)) : DEFAULT_CONFIG.days,
       patientZeroIndex:
         Number.isFinite(pzRaw) && pzRaw >= 0 && pzRaw < MANTA_NODES.length
           ? pzRaw
@@ -1413,26 +1595,33 @@
   // ============================================================================
   function renderWeatherWidget() {
     const prof = MODE_PROFILES[activeEpiMode] || MODE_PROFILES.zombie;
+    const temp = Number.isFinite(currentMantaWeather.temperatureC) ? currentMantaWeather.temperatureC : 26.0;
+    const hum = Number.isFinite(currentMantaWeather.humidityPct) ? currentMantaWeather.humidityPct : 78.0;
+    const precip = Number.isFinite(currentMantaWeather.precipitationMm) ? currentMantaWeather.precipitationMm : 0.0;
+
     const cal = computeClimateCalibratedBeta(
       prof.betaBase,
-      currentMantaWeather.temperatureC,
-      currentMantaWeather.humidityPct,
-      currentMantaWeather.precipitationMm
+      temp,
+      hum,
+      precip
     );
 
-    dom.weatherTempVal.textContent = `${currentMantaWeather.temperatureC.toFixed(1)} °C`;
-    dom.weatherHumVal.textContent = `${Math.round(currentMantaWeather.humidityPct)} %`;
-    dom.weatherPrecipVal.textContent = `${currentMantaWeather.precipitationMm.toFixed(1)} mm`;
-    dom.weatherFactorVal.textContent = `${cal.multiplier.toFixed(2)}× (β=${cal.betaCalibrated.toFixed(2)})`;
+    dom.weatherTempVal.textContent = `${temp.toFixed(1)} °C`;
+    dom.weatherHumVal.textContent = `${Math.round(hum)} %`;
+    dom.weatherPrecipVal.textContent = `${precip.toFixed(1)} mm`;
+    dom.weatherFactorVal.textContent = `${(cal.multiplier || 1.0).toFixed(2)}× (β=${(cal.betaCalibrated || prof.betaBase).toFixed(2)})`;
     dom.weatherSourceBadge.textContent = currentMantaWeather.live
       ? "En vivo · Open-Meteo Manta"
-      : "Climatología Manta (Respaldo)";
+      : "🌤️ Clima Promedio (Modo Offline)";
   }
 
   async function fetchLiveMantaWeather() {
+    const controller = new AbortController();
+    const tId = setTimeout(() => {
+      controller.abort();
+    }, 3500);
+
     try {
-      const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 3500);
       const resp = await fetch(OPEN_METEO_URL, { signal: controller.signal });
       clearTimeout(tId);
       if (!resp.ok) throw new Error("Open-Meteo HTTP error");
@@ -1440,124 +1629,275 @@
       if (data && data.current) {
         currentMantaWeather = {
           live: true,
-          temperatureC: Number(data.current.temperature_2m ?? 26.8),
-          humidityPct: Number(data.current.relative_humidity_2m ?? 78),
+          temperatureC: Number(data.current.temperature_2m ?? 26.0),
+          humidityPct: Number(data.current.relative_humidity_2m ?? 78.0),
           precipitationMm: Number(data.current.precipitation ?? 0.0),
           source: "Open-Meteo Live"
         };
+      } else {
+        throw new Error("Invalid Open-Meteo payload");
       }
     } catch (_) {
-      // Mantiene valores climatológicos costeros de Manta sin lanzar error
+      clearTimeout(tId);
+      // Fallback Rápido (Timeout / Error): asigna valores climáticos por defecto (Temp: 26°C, Humedad: 78%)
+      currentMantaWeather = {
+        live: false,
+        temperatureC: 26.0,
+        humidityPct: 78.0,
+        precipitationMm: 0.0,
+        source: "offline"
+      };
+    } finally {
+      renderWeatherWidget();
     }
-    renderWeatherWidget();
   }
 
   // ============================================================================
   // 7. AUTO-OPTIMIZADOR PRESUPUESTARIO E INFORME EJECUTIVO DEL ALCALDE
   // ============================================================================
-  function runBudgetAutoOptimizer() {
-    const baseCfg = readConfigFromForm();
-    const evalSeeds = deriveSubSeeds(baseCfg.seed, Math.min(14, Math.max(8, Math.floor(baseCfg.runs / 3))));
+  let activeOptimizedPortfolioLabel = "";
 
-    const candidates = [
-      {
-        label: "Escudo Integral + Cerco Perimetral Rápido",
-        useVaccines: true,
-        useFumigation: true,
-        useClosure: true,
-        dailyBrigadeArrival: Math.max(3, baseCfg.dailyBrigadeArrival),
-        dailyDoseArrival: Math.max(1000, baseCfg.dailyDoseArrival)
-      },
-      {
-        label: "Anillo Vacunal + Cerco Vial Selectivo",
-        useVaccines: true,
-        useFumigation: false,
-        useClosure: true,
-        dailyBrigadeArrival: Math.max(2, baseCfg.dailyBrigadeArrival),
-        dailyDoseArrival: Math.max(1200, baseCfg.dailyDoseArrival)
-      },
-      {
-        label: "Choque Antivectorial + Cerco de Contención (Variante Resistente)",
-        useVaccines: true,
-        useFumigation: true,
-        useClosure: true,
-        dailyBrigadeArrival: Math.max(4, baseCfg.dailyBrigadeArrival),
-        dailyDoseArrival: Math.max(700, baseCfg.dailyDoseArrival)
-      },
-      {
-        label: "Vacunación Preventiva + Fumigación Intensiva",
-        useVaccines: true,
-        useFumigation: true,
-        useClosure: false,
-        dailyBrigadeArrival: Math.max(3, baseCfg.dailyBrigadeArrival),
-        dailyDoseArrival: Math.max(1100, baseCfg.dailyDoseArrival)
-      },
-      {
-        label: "Fumigación + Cerco Sanitario Estricto (Sin Biológico)",
-        useVaccines: false,
-        useFumigation: true,
-        useClosure: true,
-        dailyBrigadeArrival: Math.max(4, baseCfg.dailyBrigadeArrival),
-        dailyDoseArrival: baseCfg.dailyDoseArrival
-      },
-      {
-        label: "Vacunación Masiva Exclusiva en Anillo Sano",
-        useVaccines: true,
-        useFumigation: false,
-        useClosure: false,
-        dailyBrigadeArrival: 0,
-        dailyDoseArrival: Math.max(1500, baseCfg.dailyDoseArrival)
-      },
-      {
-        label: "Configuración Operativa Actual (Referencia)",
-        useVaccines: baseCfg.useVaccines,
-        useFumigation: baseCfg.useFumigation,
-        useClosure: baseCfg.useClosure,
-        dailyBrigadeArrival: baseCfg.dailyBrigadeArrival,
-        dailyDoseArrival: baseCfg.dailyDoseArrival
+  async function runBudgetAutoOptimizer() {
+    if (activeBusyOperations > 0) return;
+    setOperationButtonsBusy(true);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    try {
+      const baseCfg = readConfigFromForm();
+      const stock = baseCfg.totalVaccines || 0;
+      const efficacy = baseCfg.vaccineEfficacyPct || 85;
+      const budget = baseCfg.totalBudget || 0;
+      const pzName = MANTA_NODES[baseCfg.patientZeroIndex].name;
+      const evalSeeds = deriveSubSeeds(baseCfg.seed, Math.min(14, Math.max(8, Math.floor(baseCfg.runs / 3))));
+
+      // Evaluación real de referencia con la configuración actual del formulario
+      const baselineSim = runMonteCarloSimulation(baseCfg, evalSeeds);
+      const baselineSaved = baselineSim.summary.shield.savedStats.mean || 0;
+
+      let portfolioLabel = "";
+      let regimeType = "";
+      let regimeCandidates = [];
+
+      // Regla 3: Stock Bajo (< 5,000) o Efectividad < 60% -> Sin Biológico
+      if (stock < 5000 || efficacy < 60) {
+        regimeType = "no_bio";
+        portfolioLabel = "Fumigación + Cerco Sanitario Estricto (Sin Biológico)";
+        regimeCandidates = [
+          {
+            useVaccines: false,
+            useFumigation: true,
+            useClosure: true,
+            dailyBrigadeArrival: 3,
+            dailyDoseArrival: 50
+          },
+          {
+            useVaccines: false,
+            useFumigation: true,
+            useClosure: true,
+            dailyBrigadeArrival: 4,
+            dailyDoseArrival: 50
+          },
+          {
+            useVaccines: false,
+            useFumigation: true,
+            useClosure: true,
+            dailyBrigadeArrival: Math.min(8, Math.max(5, baseCfg.dailyBrigadeArrival)),
+            dailyDoseArrival: 50
+          }
+        ];
+      } else if (stock > 15000) {
+        // Regla 1: Stock Alto (> 15,000) y Efectividad >= 60% -> Priorizar gasto en biológicos
+        regimeType = "high_stock";
+        portfolioLabel = "Vacunación Masiva y Escudo de Centralidad";
+        regimeCandidates = [
+          {
+            useVaccines: true,
+            useFumigation: false,
+            useClosure: false,
+            dailyBrigadeArrival: 0,
+            dailyDoseArrival: Math.min(4000, Math.max(1600, Math.round(stock / 14))),
+            requireBioDominance: true
+          },
+          {
+            useVaccines: true,
+            useFumigation: false,
+            useClosure: false,
+            dailyBrigadeArrival: 0,
+            dailyDoseArrival: Math.min(4000, Math.max(2200, Math.round(stock / 10))),
+            requireBioDominance: true
+          },
+          {
+            useVaccines: true,
+            useFumigation: false,
+            useClosure: false,
+            dailyBrigadeArrival: 0,
+            dailyDoseArrival: Math.min(4000, Math.max(3000, Math.round(stock / 7))),
+            requireBioDominance: true
+          },
+          {
+            useVaccines: true,
+            useFumigation: true,
+            useClosure: false,
+            dailyBrigadeArrival: 1,
+            dailyDoseArrival: Math.min(4000, Math.max(2200, Math.round(stock / 10))),
+            requireBioDominance: true
+          }
+        ];
+      } else {
+        // Regla 2: Stock Medio (5,000 - 15,000) y Efectividad >= 60% -> Estrategia Mixta
+        regimeType = "mid_stock";
+        portfolioLabel = "Estrategia Mixta: Vacunación Focalizada + Fumigación";
+        regimeCandidates = [
+          {
+            useVaccines: true,
+            useFumigation: true,
+            useClosure: false,
+            dailyBrigadeArrival: 2,
+            dailyDoseArrival: Math.min(4000, Math.max(750, Math.round(stock / 12)))
+          },
+          {
+            useVaccines: true,
+            useFumigation: true,
+            useClosure: false,
+            dailyBrigadeArrival: 3,
+            dailyDoseArrival: Math.min(4000, Math.max(950, Math.round(stock / 10)))
+          },
+          {
+            useVaccines: true,
+            useFumigation: true,
+            useClosure: false,
+            dailyBrigadeArrival: 4,
+            dailyDoseArrival: Math.min(4000, Math.max(1150, Math.round(stock / 8)))
+          }
+        ];
       }
-    ];
 
-    let bestCandidate = candidates[0];
-    let bestSaved = -Infinity;
-    let baselineSaved = 0;
+      let bestCandidate = regimeCandidates[0];
+      let bestSim = null;
+      let bestSaved = -Infinity;
 
-    candidates.forEach((cand, idx) => {
-      const testCfg = Object.assign({}, baseCfg, {
-        useVaccines: cand.useVaccines,
-        useFumigation: cand.useFumigation,
-        useClosure: cand.useClosure,
-        dailyBrigadeArrival: cand.dailyBrigadeArrival,
-        dailyDoseArrival: cand.dailyDoseArrival
+      regimeCandidates.forEach((cand) => {
+        const testCfg = Object.assign({}, baseCfg, {
+          useVaccines: cand.useVaccines,
+          useFumigation: cand.useFumigation,
+          useClosure: cand.useClosure,
+          dailyBrigadeArrival: cand.dailyBrigadeArrival,
+          dailyDoseArrival: cand.dailyDoseArrival
+        });
+        const sim = runMonteCarloSimulation(testCfg, evalSeeds);
+        const sShield = sim.summary.shield;
+        const vacSpentCand = (sShield.meanDoses || 0) * COST_VACCINE_DOSE;
+        const bioShare = sShield.meanSpent > 0 ? vacSpentCand / Math.max(0.0001, sShield.meanSpent) : 1;
+
+        if (cand.requireBioDominance && sShield.meanSpent > 0 && bioShare < 0.8) {
+          return;
+        }
+
+        if (sShield.savedStats.mean > bestSaved || bestSim === null) {
+          bestSaved = sShield.savedStats.mean || 0;
+          bestCandidate = cand;
+          bestSim = sim;
+        }
       });
-      const sim = runMonteCarloSimulation(testCfg, evalSeeds);
-      const saved = sim.summary.shield.savedStats.mean;
-      if (idx === candidates.length - 1) {
-        baselineSaved = saved;
+
+      if (!bestSim) {
+        const fallbackCfg = Object.assign({}, baseCfg, {
+          useVaccines: bestCandidate.useVaccines,
+          useFumigation: bestCandidate.useFumigation,
+          useClosure: bestCandidate.useClosure,
+          dailyBrigadeArrival: bestCandidate.dailyBrigadeArrival,
+          dailyDoseArrival: bestCandidate.dailyDoseArrival
+        });
+        bestSim = runMonteCarloSimulation(fallbackCfg, evalSeeds);
+        bestSaved = bestSim.summary.shield.savedStats.mean || 0;
       }
-      if (saved > bestSaved) {
-        bestSaved = saved;
-        bestCandidate = cand;
+
+      const optimizedCfg = Object.assign({}, baseCfg, {
+        useVaccines: bestCandidate.useVaccines,
+        useFumigation: bestCandidate.useFumigation,
+        useClosure: bestCandidate.useClosure,
+        dailyBrigadeArrival: bestCandidate.dailyBrigadeArrival,
+        dailyDoseArrival: bestCandidate.dailyDoseArrival
+      });
+
+      activeOptimizedPortfolioLabel = portfolioLabel;
+      applyConfigToForm(optimizedCfg);
+
+      const bestShield = bestSim.summary.shield;
+      const vacSpent = Math.round((bestShield.meanDoses || 0) * COST_VACCINE_DOSE) || 0;
+      const fumSpent = Math.round((bestShield.meanFumigations || 0) * COST_FUMIGATION) || 0;
+      const closeSpent = Math.round((bestShield.meanClosures || 0) * COST_NODE_CLOSURE) || 0;
+      const spentTotal = bestShield.meanSpent || 0;
+      const bioSharePct = spentTotal > 0
+        ? Math.min(100, Math.round((vacSpent / Math.max(0.0001, spentTotal)) * 100))
+        : (regimeType === "no_bio" ? 0 : 100);
+      const savedMean = Math.round(bestSaved || 0);
+      const extraVsRandom = Math.max(
+        0,
+        Math.round((bestSaved || 0) - (bestSim.summary.random.savedStats.mean || 0))
+      );
+      const gainVsPrev = Math.round((bestSaved || 0) - (baselineSaved || 0));
+      const gainClause = gainVsPrev > 0
+        ? ` · <strong>+${formatInt(gainVsPrev)}</strong> vs. configuración previa`
+        : "";
+
+      let bannerHtml = "";
+      let toastHtml = "";
+
+      if (regimeType === "high_stock") {
+        bannerHtml =
+          `🧠 <strong>Auto-Optimizador Presupuestario (Stock Alto &gt; 15,000 dosis):</strong> ` +
+          `Con <strong>${formatInt(stock)} vacunas disponibles</strong> y efectividad del <strong>${efficacy}%</strong> (foco en ${pzName}), ` +
+          `el portafolio ganador es <strong>"${portfolioLabel}"</strong>. ` +
+          `Se prioriza el gasto en biológicos destinando <strong>${formatUSD(vacSpent)} (${bioSharePct}% de la inversión ejecutada)</strong> ` +
+          `a <strong>${formatInt(bestShield.meanDoses || 0)} dosis</strong> en los nodos de mayor centralidad (${formatInt(optimizedCfg.dailyDoseArrival)} dosis/día), ` +
+          `salvando <strong>${formatInt(savedMean)} vidas</strong> en promedio (<strong>+${formatInt(extraVsRandom)} vs. reparto al azar</strong>${gainClause}).`;
+
+        toastHtml = `Stock Alto (${formatInt(stock)} dosis): aplicado <strong>${portfolioLabel}</strong>`;
+      } else if (regimeType === "mid_stock") {
+        bannerHtml =
+          `🧠 <strong>Auto-Optimizador Presupuestario (Stock Medio 5,000–15,000 dosis):</strong> ` +
+          `Con <strong>${formatInt(stock)} vacunas disponibles</strong> y efectividad del <strong>${efficacy}%</strong> (foco en ${pzName}), ` +
+          `el portafolio ganador es <strong>"${portfolioLabel}"</strong>. ` +
+          `Se equilibra el presupuesto (${formatUSD(budget)}) entre <strong>${formatInt(bestShield.meanDoses || 0)} dosis focalizadas (${formatUSD(vacSpent)})</strong> ` +
+          `en barrios puente (${formatInt(optimizedCfg.dailyDoseArrival)} dosis/día) y <strong>${fmtDec.format(bestShield.meanFumigations || 0)} brigadas de fumigación (${formatUSD(fumSpent)})</strong> ` +
+          `(${optimizedCfg.dailyBrigadeArrival} brigadas/día), salvando <strong>${formatInt(savedMean)} vidas</strong> en promedio ` +
+          `(<strong>+${formatInt(extraVsRandom)} vs. reparto al azar</strong>${gainClause}).`;
+
+        toastHtml = `Stock Medio (${formatInt(stock)} dosis): aplicada <strong>${portfolioLabel}</strong>`;
+      } else {
+        const lowReason =
+          stock < 5000 && efficacy < 60
+            ? `stock crítico de <strong>${formatInt(stock)} dosis (&lt; 5,000)</strong> y efectividad reducida del <strong>${efficacy}% (&lt; 60%)</strong>`
+            : stock < 5000
+              ? `stock bajo de <strong>${formatInt(stock)} vacunas (&lt; 5,000 dosis)</strong>`
+              : `efectividad vacunal reducida al <strong>${efficacy}% (&lt; 60%)</strong>`;
+        const headerTrigger =
+          stock < 5000 && efficacy < 60
+            ? "Stock Bajo &lt; 5,000 y Efectividad &lt; 60%"
+            : stock < 5000
+              ? "Stock Bajo &lt; 5,000 dosis"
+              : "Efectividad Vacunal &lt; 60%";
+
+        bannerHtml =
+          `🧠 <strong>Auto-Optimizador Presupuestario (${headerTrigger}):</strong> ` +
+          `Ante ${lowReason} (foco en ${pzName}), el portafolio ganador es <strong>"${portfolioLabel}"</strong>. ` +
+          `Se evita el desperdicio en biológicos (<strong>$0 en dosis</strong>) y se concentran <strong>${formatUSD(fumSpent + closeSpent)}</strong> ` +
+          `en <strong>${fmtDec.format(bestShield.meanClosures || 0)} cercos sanitarios</strong> y <strong>${fmtDec.format(bestShield.meanFumigations || 0)} brigadas de fumigación</strong> ` +
+          `(${optimizedCfg.dailyBrigadeArrival} brigadas/día), salvando <strong>${formatInt(savedMean)} vidas</strong> en promedio ` +
+          `(<strong>+${formatInt(extraVsRandom)} vs. reparto al azar</strong>${gainClause}).`;
+
+        toastHtml = `${stock < 5000 ? `Stock Bajo (${formatInt(stock)})` : `Efectividad ${efficacy}% (<60%)`}: aplicado <strong>${portfolioLabel}</strong>`;
       }
-    });
 
-    const optimizedCfg = Object.assign({}, baseCfg, {
-      useVaccines: bestCandidate.useVaccines,
-      useFumigation: bestCandidate.useFumigation,
-      useClosure: bestCandidate.useClosure,
-      dailyBrigadeArrival: bestCandidate.dailyBrigadeArrival,
-      dailyDoseArrival: bestCandidate.dailyDoseArrival
-    });
+      dom.optimizerBanner.classList.remove("hidden");
+      dom.optimizerBanner.innerHTML = bannerHtml;
 
-    applyConfigToForm(optimizedCfg);
-    const gain = Math.max(0, Math.round(bestSaved - baselineSaved));
-
-    dom.optimizerBanner.classList.remove("hidden");
-    dom.optimizerBanner.innerHTML =
-      `🧠 <strong>Auto-Optimizador Presupuestario Completado:</strong> Se evaluaron <strong>${candidates.length} combinaciones tácticas</strong> para presupuesto ${formatUSD(optimizedCfg.totalBudget)} (efectividad vacunal ${optimizedCfg.vaccineEfficacyPct}%, foco en ${MANTA_NODES[optimizedCfg.patientZeroIndex].name}). ` +
-      `Portafolio ganador aplicado: <strong>"${bestCandidate.label}"</strong> (${formatInt(optimizedCfg.dailyDoseArrival)} dosis/día · ${optimizedCfg.dailyBrigadeArrival} brigadas/día)${gain > 0 ? `, rescatando <strong>+${formatInt(gain)} vidas adicionales</strong> frente a la configuración previa` : ", confirmando que el portafolio activo ya se encuentra en el óptimo global"}.`;
-
-    executeFullSimulation(true);
+      showToast(toastHtml, "success", 3000);
+      await executeFullSimulation(true, true);
+    } finally {
+      setOperationButtonsBusy(false);
+    }
   }
 
   function renderMayorReport(result) {
@@ -1591,37 +1931,45 @@
     const first48Names = Array.from(earlyTargetSet);
     const bridgeText = priorityNeighbors.join(" y ");
 
-    const vacCost = Math.round(sShield.meanDoses * COST_VACCINE_DOSE);
-    const fumCost = Math.round(sShield.meanFumigations * COST_FUMIGATION);
-    const closeCost = Math.round(sShield.meanClosures * COST_NODE_CLOSURE);
-    const totalSpent = Math.round(sShield.meanSpent);
+    const vacCost = Math.round((sShield.meanDoses || 0) * COST_VACCINE_DOSE) || 0;
+    const fumCost = Math.round((sShield.meanFumigations || 0) * COST_FUMIGATION) || 0;
+    const closeCost = Math.round((sShield.meanClosures || 0) * COST_NODE_CLOSURE) || 0;
+    const totalSpent = Math.round(sShield.meanSpent || 0) || 0;
 
-    const savedVsNoneMean = Math.round(sShield.savedStats.mean);
-    const savedVsNoneMin = Math.round(sShield.savedStats.min);
-    const savedVsNoneMax = Math.round(sShield.savedStats.max);
+    const savedVsNoneMean = Math.round(sShield.savedStats ? sShield.savedStats.mean || 0 : 0) || 0;
+    const savedVsNoneMin = Math.round(sShield.savedStats ? sShield.savedStats.min || 0 : 0) || 0;
+    const savedVsNoneMax = Math.round(sShield.savedStats ? sShield.savedStats.max || 0 : 0) || 0;
 
-    const randSavedMean = Math.round(sRand.savedStats.mean);
-    const randSavedMin = Math.round(sRand.savedStats.min);
-    const randSavedMax = Math.round(sRand.savedStats.max);
-    const extraVsRandom = savedVsNoneMean - randSavedMean;
+    const randSavedMean = Math.round(sRand.savedStats ? sRand.savedStats.mean || 0 : 0) || 0;
+    const randSavedMin = Math.round(sRand.savedStats ? sRand.savedStats.min || 0 : 0) || 0;
+    const randSavedMax = Math.round(sRand.savedStats ? sRand.savedStats.max || 0 : 0) || 0;
+    const extraVsRandom = (savedVsNoneMean - randSavedMean) || 0;
 
-    const ringNote =
-      pzNode.neighbors.length >= 3 || config.vaccineEfficacyPct <= 60
-        ? ` Como el foco compromete un nodo estratégico (${pzNode.name}) o presenta efectividad vacunal de ${config.vaccineEfficacyPct}%, el algoritmo activa el Cerco Perimetral Adaptativo: sella y fumiga el origen sin desperdiciar vacunas dentro del foco expuesto y crea un anillo protector en ${bridgeText}.`
-        : ` Con efectividad vacunal del ${config.vaccineEfficacyPct}%, el anillo preventivo blinda los corredores de mayor flujo exclusivamente en población sana.`;
+    const ringNote = !config.useVaccines
+      ? ` Dado el umbral operativo actual (${formatInt(config.totalVaccines)} vacunas en stock, efectividad ${config.vaccineEfficacyPct}%), se suspende el gasto biológico y se blinda la red exclusivamente con cercos viales y control vectorial.`
+      : pzNode.neighbors.length >= 3 || config.vaccineEfficacyPct <= 60
+        ? ` Como el foco compromete un nodo estratégico (${pzNode.name}) o presenta efectividad vacunal de ${config.vaccineEfficacyPct}%, el algoritmo activa el Cerco Perimetral Adaptativo: contiene el origen sin desperdiciar vacunas dentro del foco expuesto y crea un anillo protector en ${bridgeText}.`
+        : ` Con efectividad vacunal del ${config.vaccineEfficacyPct}% y ${formatInt(config.totalVaccines)} dosis disponibles, el escudo preventivo blinda los corredores de mayor centralidad exclusivamente en población sana.`;
 
     const outbreakLabel = isDengue ? "brote epidémico de Dengue (INEC/MSP)" : "brote infeccioso (Track B)";
+    const activeStrategyTitle = activeOptimizedPortfolioLabel || "Escudo de Centralidad + Cerco Perimetral Adaptativo";
 
     const leadText =
       `Señor Alcalde de Manta: Se ha confirmado el inicio del ${outbreakLabel} en ${pzNode.name} (GPS ${pzNode.lat}, ${pzNode.lng}). ` +
-      `Activando la estrategia "Escudo de Centralidad + Cerco Perimetral Adaptativo" con techo de ${formatUSD(config.totalBudget)} ` +
+      `Activando la estrategia "${activeStrategyTitle}" con techo de ${formatUSD(config.totalBudget)} ` +
       `(ejecutando en promedio ${formatUSD(totalSpent)}), salvaremos ${formatInt(savedVsNoneMean)} vidas mantenses en promedio ` +
       `[Rango: ${formatInt(savedVsNoneMin)} a ${formatInt(savedVsNoneMax)}] durante los próximos ${config.days} días.`;
 
+    const opsSummary48h = !config.useVaccines
+      ? `Desplegamos de inmediato fumigación/control vectorial (-40% transmisión local) y cerco sanitario selectivo (-75% flujo inter-barrial) sobre ${pzNode.name} y sus corredores colindantes (${bridgeText}), sin comprometer presupuesto en biológicos.`
+      : config.useFumigation && !config.useClosure
+        ? `Combinamos brigadas de fumigación en ${pzNode.name} (-40% transmisión local) con vacunación focalizada prioritaria en los barrios puente conectados (${bridgeText}).`
+        : !config.useFumigation && !config.useClosure
+          ? `Concentramos el despliegue biológico masivo sobre los hubs de mayor centralidad y barrios puente conectados a ${pzNode.name} (${bridgeText}), inmunizando población sana antes de que cruce la onda de contagio.`
+          : `Desplegamos fumigación/control vectorial y cerco selectivo en ${pzNode.name} para reducir el contagio local un 40% y cortar en 75% la salida de casos, mientras levantamos el anillo de vacunación preventiva en sus barrios vecinos conectados (${bridgeText}).`;
+
     const sec1Text =
-      `En las primeras 48 horas intervenimos de inmediato en: ${first48Names.join(", ")}. ` +
-      `Desplegamos fumigación/control vectorial y cerco selectivo en ${pzNode.name} para reducir el contagio local un 40% y cortar en 75% la salida de casos, ` +
-      `mientras levantamos el anillo de vacunación preventiva en sus barrios vecinos conectados (${bridgeText}).`;
+      `En las primeras 48 horas intervenimos de inmediato en: ${first48Names.join(", ")}. ${opsSummary48h}`;
 
     const sec2Text =
       `De los ${formatUSD(config.totalBudget)} autorizados (${formatInt(config.dailyDoseArrival)} dosis/día y ${config.dailyBrigadeArrival} brigadas/día), ` +
@@ -1721,16 +2069,16 @@
     dom.kpiRandomFooter.textContent =
       `Dosis a 🟢 S: ${formatInt(sRand.meanDoses)} · Fumig.: ${fmtDec.format(sRand.meanFumigations)} · Cercos: ${fmtDec.format(sRand.meanClosures)}`;
 
-    const extraLives = sShield.savedStats.mean - sRand.savedStats.mean;
+    const extraLives = (sShield.savedStats ? sShield.savedStats.mean || 0 : 0) - (sRand.savedStats ? sRand.savedStats.mean || 0 : 0);
     const sign = extraLives >= 0 ? "+" : "";
     dom.kpiShieldDeltaBadge.textContent = `${sign}${formatInt(extraLives)} vs. Azar`;
 
-    dom.kpiShieldSavedMean.textContent = formatInt(sShield.savedStats.mean);
-    dom.kpiShieldSavedRange.textContent = `[${formatInt(sShield.savedStats.min)} - ${formatInt(sShield.savedStats.max)}]`;
-    dom.kpiShieldInfMean.textContent = formatInt(sShield.infectedStats.mean);
-    dom.kpiShieldInfRange.textContent = `[${formatInt(sShield.infectedStats.min)} - ${formatInt(sShield.infectedStats.max)}]`;
+    dom.kpiShieldSavedMean.textContent = formatInt(sShield.savedStats ? sShield.savedStats.mean || 0 : 0);
+    dom.kpiShieldSavedRange.textContent = `[${formatInt(sShield.savedStats ? sShield.savedStats.min || 0 : 0)} - ${formatInt(sShield.savedStats ? sShield.savedStats.max || 0 : 0)}]`;
+    dom.kpiShieldInfMean.textContent = formatInt(sShield.infectedStats ? sShield.infectedStats.mean || 0 : 0);
+    dom.kpiShieldInfRange.textContent = `[${formatInt(sShield.infectedStats ? sShield.infectedStats.min || 0 : 0)} - ${formatInt(sShield.infectedStats ? sShield.infectedStats.max || 0 : 0)}]`;
     dom.kpiShieldFooter.textContent =
-      `Inversión: ${formatUSD(sShield.meanSpent)} / ${formatUSD(config.totalBudget)} · Dosis 🟢 S: ${formatInt(sShield.meanDoses)}`;
+      `Inversión: ${formatUSD(sShield.meanSpent || 0)} / ${formatUSD(config.totalBudget || 0)} · Dosis 🟢 S: ${formatInt(sShield.meanDoses || 0)}`;
 
     dom.tableFinalDay.textContent = String(config.days);
     dom.barrioTableBody.innerHTML = "";
@@ -1738,12 +2086,12 @@
     let totVac = 0, totFum = 0, totClose = 0, totInfNone = 0, totInfRand = 0, totInfShield = 0;
 
     MANTA_NODES.forEach((node, idx) => {
-      const vac = sShield.nodeMeanVac[idx];
-      const fum = sShield.nodeMeanFum[idx];
-      const cls = sShield.nodeMeanClose[idx];
-      const infNone = sNone.nodeMeanInf[idx];
-      const infRand = sRand.nodeMeanInf[idx];
-      const infShield = sShield.nodeMeanInf[idx];
+      const vac = sShield.nodeMeanVac ? sShield.nodeMeanVac[idx] || 0 : 0;
+      const fum = sShield.nodeMeanFum ? sShield.nodeMeanFum[idx] || 0 : 0;
+      const cls = sShield.nodeMeanClose ? sShield.nodeMeanClose[idx] || 0 : 0;
+      const infNone = sNone.nodeMeanInf ? sNone.nodeMeanInf[idx] || 0 : 0;
+      const infRand = sRand.nodeMeanInf ? sRand.nodeMeanInf[idx] || 0 : 0;
+      const infShield = sShield.nodeMeanInf ? sShield.nodeMeanInf[idx] || 0 : 0;
       const savedLocal = infNone - infShield;
 
       totVac += vac;
@@ -1814,7 +2162,7 @@
 
     dom.auditSummaryText.textContent =
       `Semilla ${config.seed} → sub-semillas [${firstSeedsPreview}${result.subSeeds.length > 4 ? ", ..." : ""}] (${config.runs} corridas, modo ${config.mode.toUpperCase()}). ` +
-      `Presupuesto ejecutado por Escudo: ${formatUSD(sShield.meanSpent)} / ${formatUSD(config.totalBudget)}. ` +
+      `Presupuesto ejecutado por Escudo: ${formatUSD(sShield.meanSpent || 0)} / ${formatUSD(config.totalBudget || 0)}. ` +
       `Dosis aplicadas fuera de población 🟢 Sana: 0 (cumplimiento estricto 100%). Hash FNV-1a: ${hashHex}.`;
   }
 
@@ -1823,6 +2171,17 @@
     rows.forEach((row, idx) => {
       row.classList.toggle("row-selected", idx === selectedNodeIndex);
     });
+  }
+
+  function sanitizeChartSeries(arr) {
+    if (!arr) return [];
+    const len = arr.length;
+    const clean = new Float64Array(len);
+    for (let i = 0; i < len; i++) {
+      const v = arr[i];
+      clean[i] = Number.isFinite(v) ? v : 0;
+    }
+    return Array.from(clean);
   }
 
   function renderCharts(result) {
@@ -1855,8 +2214,22 @@
       yAxisTitle = "Infectados Acumulados (Hab.)";
     }
 
+    meanNone = sanitizeChartSeries(meanNone);
+    minNone = sanitizeChartSeries(minNone);
+    maxNone = sanitizeChartSeries(maxNone);
+    meanRand = sanitizeChartSeries(meanRand);
+    minRand = sanitizeChartSeries(minRand);
+    maxRand = sanitizeChartSeries(maxRand);
+    meanShield = sanitizeChartSeries(meanShield);
+    minShield = sanitizeChartSeries(minShield);
+    maxShield = sanitizeChartSeries(maxShield);
+
     const seirKey = dom.selectSeirStrategy.value || "shield";
     const chosenSeir = result.summary[seirKey].series;
+    const cleanS = sanitizeChartSeries(chosenSeir.S);
+    const cleanE = sanitizeChartSeries(chosenSeir.E);
+    const cleanI = sanitizeChartSeries(chosenSeir.I);
+    const cleanR = sanitizeChartSeries(chosenSeir.R);
 
     if (typeof window.Chart === "undefined") {
       drawFallbackLines(dom.comparisonCanvas, [
@@ -1865,10 +2238,10 @@
         { label: "Escudo + Cerco Perimetral", color: "#06d6a0", data: meanShield }
       ]);
       drawFallbackLines(dom.seirCanvas, [
-        { label: prof.labels.S, color: "#10b981", data: chosenSeir.S },
-        { label: prof.labels.E, color: "#f59e0b", data: chosenSeir.E },
-        { label: prof.labels.I, color: "#ef4444", data: chosenSeir.I },
-        { label: prof.labels.R, color: "#3b82f6", data: chosenSeir.R }
+        { label: prof.labels.S, color: "#10b981", data: cleanS },
+        { label: prof.labels.E, color: "#f59e0b", data: cleanE },
+        { label: prof.labels.I, color: "#ef4444", data: cleanI },
+        { label: prof.labels.R, color: "#3b82f6", data: cleanR }
       ]);
       return;
     }
@@ -2041,7 +2414,7 @@
         datasets: [
           {
             label: prof.labels.S,
-            data: chosenSeir.S,
+            data: cleanS,
             borderColor: "#10b981",
             backgroundColor: "rgba(16, 185, 129, 0.10)",
             borderWidth: 2.4,
@@ -2051,7 +2424,7 @@
           },
           {
             label: prof.labels.E,
-            data: chosenSeir.E,
+            data: cleanE,
             borderColor: "#f59e0b",
             backgroundColor: "rgba(245, 158, 11, 0.12)",
             borderWidth: 2.2,
@@ -2061,7 +2434,7 @@
           },
           {
             label: prof.labels.I,
-            data: chosenSeir.I,
+            data: cleanI,
             borderColor: "#ef4444",
             backgroundColor: "rgba(239, 68, 68, 0.16)",
             borderWidth: 2.6,
@@ -2071,7 +2444,7 @@
           },
           {
             label: prof.labels.R,
-            data: chosenSeir.R,
+            data: cleanR,
             borderColor: "#3b82f6",
             backgroundColor: "rgba(59, 130, 246, 0.12)",
             borderWidth: 2.4,
@@ -2172,7 +2545,7 @@
   }
 
   // ============================================================================
-  // 9. GEMELO CARTOGRÁFICO DUAL: LEAFLET GPS (CARTODB DARK) + GRAFO SVG (DÍA 0..60)
+  // 9. GEMELO CARTOGRÁFICO DUAL: LEAFLET GPS (OSM OSCURO + ESRI SATÉLITE) + SVG
   // ============================================================================
   const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -2193,6 +2566,160 @@
     return String(Math.round(v));
   }
 
+  function recenterAllNodesOnMap() {
+    if (!leafletMap || !allNodesBounds) return;
+    leafletMap.invalidateSize();
+    leafletMap.fitBounds(allNodesBounds, { padding: [45, 45], maxZoom: 14 });
+  }
+
+  // ============================================================================
+  // MODO PANTALLA COMPLETA (Fullscreen API nativa) SOBRE EL CONTENEDOR DEL MAPA
+  // ============================================================================
+  function getFullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function isMapFullscreen() {
+    return getFullscreenElement() === dom.geoMapContainer;
+  }
+
+  function updateFullscreenButtonState() {
+    if (!dom.btnFullscreenMap) return;
+    const active = isMapFullscreen();
+    if (dom.geoMapContainer) dom.geoMapContainer.classList.toggle("is-fullscreen", active);
+    dom.btnFullscreenMap.classList.toggle("active", active);
+    dom.btnFullscreenMap.setAttribute("aria-pressed", String(active));
+    dom.btnFullscreenMap.textContent = active ? "🗗 Salir de Pantalla Completa" : "🖥️ Pantalla Completa";
+  }
+
+  function refreshLeafletAfterFullscreenChange() {
+    updateFullscreenButtonState();
+    if (!leafletMap) return;
+    // Doble pasada: el navegador aplica el nuevo tamaño de forma asíncrona
+    requestAnimationFrame(() => {
+      leafletMap.invalidateSize();
+      recenterAllNodesOnMap();
+    });
+    setTimeout(() => {
+      if (!leafletMap) return;
+      leafletMap.invalidateSize();
+      recenterAllNodesOnMap();
+    }, 260);
+  }
+
+  async function toggleMapFullscreen() {
+    const container = dom.geoMapContainer;
+    if (!container) return;
+
+    if (activeMapView !== "geo") {
+      setMapView("geo");
+    }
+
+    try {
+      if (isMapFullscreen()) {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      } else if (container.requestFullscreen) {
+        await container.requestFullscreen();
+      } else if (container.webkitRequestFullscreen) {
+        container.webkitRequestFullscreen();
+      } else {
+        showToast("Tu navegador no soporta el modo Pantalla Completa", "warn", 3000);
+      }
+    } catch (_) {
+      showToast("No se pudo activar la Pantalla Completa en este navegador", "warn", 3000);
+    }
+  }
+
+  function attachTileErrorGuard(layer) {
+    if (!layer || typeof layer.on !== "function") return layer;
+    layer.on("tileerror", (ev) => {
+      if (ev && ev.tile) {
+        ev.tile.style.visibility = "hidden";
+        ev.tile.style.opacity = "0";
+      }
+    });
+    return layer;
+  }
+
+  function toggleLeafletBasemap() {
+    if (activeMapView !== "geo") {
+      setMapView("geo");
+    }
+    if (!leafletMap) {
+      initLeafletGeoMap();
+    }
+    if (!leafletMap || !leafletStreetLayer || !leafletSatelliteLayer || !leafletSatelliteLabelsLayer) return;
+
+    if (activeBasemapMode === "street") {
+      activeBasemapMode = "satellite";
+      if (leafletMap.hasLayer(leafletStreetLayer)) {
+        leafletMap.removeLayer(leafletStreetLayer);
+      }
+      if (!leafletMap.hasLayer(leafletSatelliteLayer)) {
+        leafletSatelliteLayer.addTo(leafletMap);
+        if (typeof leafletSatelliteLayer.bringToBack === "function") {
+          leafletSatelliteLayer.bringToBack();
+        }
+      }
+      if (!leafletMap.hasLayer(leafletSatelliteLabelsLayer)) {
+        leafletSatelliteLabelsLayer.addTo(leafletMap);
+        if (typeof leafletSatelliteLabelsLayer.bringToFront === "function") {
+          leafletSatelliteLabelsLayer.bringToFront();
+        }
+      }
+      if (dom.mantaGeoMap) {
+        dom.mantaGeoMap.classList.add("satellite-mode");
+      }
+      if (dom.btnToggleBasemap) {
+        dom.btnToggleBasemap.classList.add("active");
+        dom.btnToggleBasemap.setAttribute("aria-pressed", "true");
+        dom.btnToggleBasemap.innerHTML = "🗺️ Ver Calles Táctico";
+      }
+      if (dom.activeBasemapBadge) {
+        dom.activeBasemapBadge.textContent = "🛰️ Satélite Híbrido (Esri)";
+      }
+    } else {
+      activeBasemapMode = "street";
+      if (leafletMap.hasLayer(leafletSatelliteLabelsLayer)) {
+        leafletMap.removeLayer(leafletSatelliteLabelsLayer);
+      }
+      if (leafletMap.hasLayer(leafletSatelliteLayer)) {
+        leafletMap.removeLayer(leafletSatelliteLayer);
+      }
+      if (!leafletMap.hasLayer(leafletStreetLayer)) {
+        leafletStreetLayer.addTo(leafletMap);
+        if (typeof leafletStreetLayer.bringToBack === "function") {
+          leafletStreetLayer.bringToBack();
+        }
+      }
+      if (dom.mantaGeoMap) {
+        dom.mantaGeoMap.classList.remove("satellite-mode");
+      }
+      if (dom.btnToggleBasemap) {
+        dom.btnToggleBasemap.classList.remove("active");
+        dom.btnToggleBasemap.setAttribute("aria-pressed", "false");
+        dom.btnToggleBasemap.innerHTML = "🛰️ Cambiar Calle / Satélite";
+      }
+      if (dom.activeBasemapBadge) {
+        dom.activeBasemapBadge.textContent = "🗺️ Calles Táctico Oscuro (Esri)";
+      }
+    }
+    leafletMap.invalidateSize({ pan: false });
+  }
+
+  function getTooltipPlacementForNode(nodeIndex) {
+    if (nodeIndex === 7) return { direction: "right", offset: [11, 0] };   // San Mateo (oeste -> hacia adentro)
+    if (nodeIndex === 1) return { direction: "left", offset: [-11, 0] };   // Terminal Terrestre (este -> hacia adentro)
+    if (nodeIndex === 6) return { direction: "left", offset: [-11, -2] };  // Los Esteros (noreste -> hacia adentro)
+    if (nodeIndex === 0) return { direction: "bottom", offset: [0, 11] };  // Mercado de Tarqui
+    if (nodeIndex === 5) return { direction: "bottom", offset: [0, 11] };  // Hospital Rodríguez Zambrano
+    return { direction: "top", offset: [0, -11] };                         // Murciélago, Centro, ULEAM
+  }
+
   function initLeafletGeoMap() {
     if (typeof window.L === "undefined" || !dom.mantaGeoMap) {
       setMapView("topo");
@@ -2204,14 +2731,58 @@
       attributionControl: true
     });
 
-    window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-      subdomains: "abcd",
-      maxZoom: 18
-    }).addTo(leafletMap);
+    // Capa Principal: Calles Táctico Oscuro (Esri World Street Map 100% libre, sin bloqueos ni API Key)
+    leafletStreetLayer = attachTileErrorGuard(
+      window.L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: "Tiles &copy; Esri &mdash; Sources: Esri, DeLorme, NAVTEQ, TomTom",
+          maxZoom: 19
+        }
+      )
+    );
 
-    const boundsCoords = MANTA_NODES.map((n) => [n.lat, n.lng]);
-    leafletMap.fitBounds(boundsCoords, { padding: [32, 32] });
+    // Capa Satelital Híbrida: Base Satelital Esri World Imagery + Capa de Vías y Nombres World Transportation
+    leafletSatelliteLayer = attachTileErrorGuard(
+      window.L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics",
+          maxZoom: 19,
+          zIndex: 1
+        }
+      )
+    );
+
+    leafletSatelliteLabelsLayer = attachTileErrorGuard(
+      window.L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: "Etiquetas &copy; Esri",
+          maxZoom: 19,
+          zIndex: 2
+        }
+      )
+    );
+
+    // Evitar que los clics en botones flotantes sean capturados por el mapa de Leaflet
+    if (window.L && window.L.DomEvent) {
+      if (dom.btnToggleBasemap) {
+        window.L.DomEvent.disableClickPropagation(dom.btnToggleBasemap);
+        window.L.DomEvent.disableScrollPropagation(dom.btnToggleBasemap);
+      }
+      if (dom.btnCenterMapNodes) {
+        window.L.DomEvent.disableClickPropagation(dom.btnCenterMapNodes);
+        window.L.DomEvent.disableScrollPropagation(dom.btnCenterMapNodes);
+      }
+    }
+
+    activeBasemapMode = "street";
+    dom.mantaGeoMap.classList.remove("satellite-mode");
+    leafletStreetLayer.addTo(leafletMap);
+
+    allNodesBounds = window.L.latLngBounds(MANTA_NODES.map((n) => [n.lat, n.lng]));
+    recenterAllNodesOnMap();
 
     leafletEdgeLines = MANTA_EDGES.map((edge) => {
       const u = MANTA_NODES[edge.u];
@@ -2222,9 +2793,9 @@
           [v.lat, v.lng]
         ],
         {
-          color: "rgba(148, 163, 184, 0.48)",
+          color: "rgba(148, 163, 184, 0.55)",
           weight: 2.6,
-          opacity: 0.85
+          opacity: 0.88
         }
       ).addTo(leafletMap);
     });
@@ -2250,10 +2821,11 @@
         fillOpacity: 0.92
       }).addTo(leafletMap);
 
+      const tipPos = getTooltipPlacementForNode(node.index);
       marker.bindTooltip(node.shortName, {
         permanent: true,
-        direction: "top",
-        offset: [0, -10],
+        direction: tipPos.direction,
+        offset: tipPos.offset,
         className: "manta-geo-label"
       });
 
@@ -2266,6 +2838,38 @@
       });
 
       return marker;
+    });
+
+    // ResizeObserver automático para garantizar encuadre completo y centrado al cargar o redimensionar/cambiar pestaña
+    if (typeof window.ResizeObserver !== "undefined") {
+      mapResizeObserver = new window.ResizeObserver((entries) => {
+        const entry = entries && entries[0];
+        if (!entry || !leafletMap || activeMapView !== "geo") return;
+        const w = Math.round(entry.contentRect.width);
+        const h = Math.round(entry.contentRect.height);
+        if (w <= 0 || h <= 0) {
+          lastObservedMapSize = "0x0";
+          return;
+        }
+        const sizeKey = `${w}x${h}`;
+        if (sizeKey === lastObservedMapSize) return;
+        lastObservedMapSize = sizeKey;
+
+        if (mapResizeRaf !== null) {
+          cancelAnimationFrame(mapResizeRaf);
+        }
+        mapResizeRaf = requestAnimationFrame(() => {
+          mapResizeRaf = null;
+          recenterAllNodesOnMap();
+        });
+      });
+      mapResizeObserver.observe(dom.mantaGeoMap);
+    }
+
+    window.addEventListener("load", () => {
+      if (activeMapView === "geo") {
+        recenterAllNodesOnMap();
+      }
     });
   }
 
@@ -2306,7 +2910,9 @@
     dom.topoMapContainer.classList.toggle("hidden", isGeo);
 
     if (isGeo && leafletMap) {
-      setTimeout(() => leafletMap.invalidateSize(), 60);
+      requestAnimationFrame(() => {
+        recenterAllNodesOnMap();
+      });
     }
     renderMapState();
   }
@@ -2412,11 +3018,12 @@
   }
 
   function computeNodeVisualColors(st, population) {
-    const zFrac = st.I / population;
-    const eFrac = st.E / population;
-    const rFrac = st.R / population;
+    const safePop = Math.max(1, population || 0);
+    const zFrac = (st ? st.I || 0 : 0) / safePop;
+    const eFrac = (st ? st.E || 0 : 0) / safePop;
+    const rFrac = (st ? st.R || 0 : 0) / safePop;
 
-    if (st.I > 0 && zFrac >= 0.015) {
+    if (st && st.I > 0 && zFrac >= 0.015) {
       const intensity = Math.min(0.88, 0.35 + zFrac * 2.6);
       return {
         stroke: st.closed ? "#38bdf8" : "#ef4444",
@@ -2424,7 +3031,7 @@
         hex: "#ef4444"
       };
     }
-    if (st.E > 0 && (eFrac >= 0.01 || st.I > 0)) {
+    if (st && st.E > 0 && (eFrac >= 0.01 || st.I > 0)) {
       return {
         stroke: st.closed ? "#38bdf8" : "#f59e0b",
         fill: "rgba(245, 158, 11, 0.42)",
@@ -2439,7 +3046,7 @@
       };
     }
     return {
-      stroke: st.closed ? "#38bdf8" : "#10b981",
+      stroke: st && st.closed ? "#38bdf8" : "#10b981",
       fill: "rgba(16, 185, 129, 0.30)",
       hex: "#10b981"
     };
@@ -2487,8 +3094,8 @@
       const hasCordon = su.closed || sv.closed;
       const activeZombieFlow = su.I + sv.I > 30;
       const immunizedCorridor =
-        su.R / MANTA_NODES[edge.u].population > 0.45 ||
-        sv.R / MANTA_NODES[edge.v].population > 0.45;
+        su.R / Math.max(1, MANTA_NODES[edge.u].population) > 0.45 ||
+        sv.R / Math.max(1, MANTA_NODES[edge.v].population) > 0.45;
 
       pathEl.classList.toggle("edge-cordon", hasCordon);
       pathEl.classList.toggle("edge-hot", !hasCordon && activeZombieFlow);
@@ -2529,7 +3136,7 @@
       }
     });
 
-    // 2. Actualizar Mapa Geoespacial Real (Leaflet + CartoDB Dark Matter)
+    // 2. Actualizar Mapa Geoespacial Real (Leaflet: OSM Táctico Oscuro / Satélite Esri)
     if (leafletMap && leafletNodeMarkers.length === MANTA_NODES.length) {
       MANTA_EDGES.forEach((edge, idx) => {
         const poly = leafletEdgeLines[idx];
@@ -2538,8 +3145,8 @@
         const hasCordon = su.closed || sv.closed;
         const activeFlow = su.I + sv.I > 30;
         const shielded =
-          su.R / MANTA_NODES[edge.u].population > 0.45 ||
-          sv.R / MANTA_NODES[edge.v].population > 0.45;
+          su.R / Math.max(1, MANTA_NODES[edge.u].population) > 0.45 ||
+          sv.R / Math.max(1, MANTA_NODES[edge.v].population) > 0.45;
 
         if (hasCordon) {
           poly.setStyle({ color: "#38bdf8", weight: 3.2, dashArray: "8, 6", opacity: 0.92 });
@@ -2560,7 +3167,7 @@
 
         // Onda de calor proporcional a infectados diarios en metros reales sobre Manta
         const heatRadius = activeLoad > 0 ? Math.min(1450, 160 + Math.sqrt(activeLoad) * 22) : 90;
-        const heatOpacity = activeLoad > 0 ? Math.min(0.52, 0.14 + (activeLoad / node.population) * 2.2) : 0.04;
+        const heatOpacity = activeLoad > 0 ? Math.min(0.52, 0.14 + (activeLoad / Math.max(1, node.population)) * 2.2) : 0.04;
         const heatColor = st.I > 0 ? "#ef4444" : st.E > 0 ? "#f59e0b" : "#10b981";
 
         leafletHeatCircles[idx].setRadius(heatRadius);
@@ -2739,10 +3346,13 @@
       .join("");
   }
 
-  async function syncAuditRecordWithCloud(lambdaUrl, entry) {
+  async function syncAuditRecordWithCloud(lambdaUrl, entry, notifyUser = false) {
     const mirror = appendLocalAuditMirror(entry);
     if (!lambdaUrl) {
       renderDynamoAuditTable(mirror, "local-mirror");
+      if (notifyUser) {
+        showToast(`Auditoría registrada · Hash <code>${entry.HashFirma}</code>`, "info", 3000);
+      }
       return;
     }
     try {
@@ -2759,12 +3369,16 @@
       }
       if (data && Array.isArray(data.auditHistory) && data.auditHistory.length > 0) {
         renderDynamoAuditTable(data.auditHistory, data.auditStorageSource || "dynamodb:SpookyThonSimulations");
+        showToast(`Guardado en Amazon DynamoDB · Hash <code>${entry.HashFirma}</code>`, "success", 3000);
         return;
       }
     } catch (_) {
       // Respaldo transparente si la Lambda remota aún no expone action=record_audit
     }
     renderDynamoAuditTable(mirror, "local-mirror");
+    if (notifyUser) {
+      showToast(`Simulación auditada · Hash <code>${entry.HashFirma}</code>`, "info", 3000);
+    }
   }
 
   async function invokeSingleLambdaWorker(lambdaUrl, payload, signal) {
@@ -3137,80 +3751,100 @@
     };
   }
 
-  async function executeFullSimulation(hideBanner = true) {
-    stopTimelinePlayback();
-    if (hideBanner) {
-      dom.reproBanner.classList.add("hidden");
-    }
-
-    const reqId = ++latestRequestId;
-    const config = readConfigFromForm();
-    const lambdaUrl = dom.inputLambdaUrl ? dom.inputLambdaUrl.value.trim() : "";
-    saveLambdaUrlPreference(lambdaUrl || "local");
-
-    if (!lambdaUrl) {
-      if (dom.cloudParallelBadge) dom.cloudParallelBadge.classList.add("hidden");
-      const localResult = runMonteCarloSimulation(config);
-      if (reqId !== latestRequestId) return;
-      setCloudStatus("mode-local", `⚡ Motor Local Activo (${fmtDec.format(localResult.elapsedMs)} ms)`);
-      renderAllViews(localResult);
-      syncAuditRecordWithCloud("", buildAuditPayloadFromResult(localResult));
-      return;
-    }
-
-    const willFanOut = config.runs >= 50 && config.runs <= 500;
-    if (dom.cloudParallelBadge) {
-      dom.cloudParallelBadge.classList.toggle("hidden", !willFanOut);
-      if (willFanOut) {
-        dom.cloudParallelBadge.textContent = "⚡ Paralelismo Cloud AWS: 5 Workers Lambda concurrentes";
-      }
-    }
-
-    setCloudStatus(
-      "mode-loading",
-      willFanOut
-        ? "☁️ Ejecutando Fan-Out (5 Workers AWS Lambda)..."
-        : "☁️ Ejecutando en AWS Lambda..."
-    );
+  async function executeFullSimulation(hideBanner = true, allowNested = false) {
+    if (activeBusyOperations > 0 && !allowNested) return;
+    setOperationButtonsBusy(true);
 
     try {
-      const cloudResult = await requestCloudLambdaSimulation(lambdaUrl, config);
-      if (reqId !== latestRequestId) return;
-
-      renderAllViews(cloudResult);
-
-      if (dom.datasetSourcePill && cloudResult.datasetSource) {
-        dom.datasetSourcePill.textContent = cloudResult.datasetSource.startsWith("s3://")
-          ? "S3 Privado: Conectado"
-          : "Dataset INEC/MSP: Activo";
+      stopTimelinePlayback();
+      if (hideBanner) {
+        dom.reproBanner.classList.add("hidden");
       }
 
-      dom.execTimingInfo.textContent = willFanOut
-        ? `⚡ Paralelismo Cloud AWS: 5 Workers Lambda concurrentes · ${Math.round(cloudResult.elapsedMs)} ms`
-        : `☁️ AWS Lambda · ${config.runs} corridas en ${Math.round(cloudResult.elapsedMs)} ms`;
+      const notifyUser = !isInitialBootstrap;
+      isInitialBootstrap = false;
+
+      const reqId = ++latestRequestId;
+      const config = readConfigFromForm();
+      const lambdaUrl = dom.inputLambdaUrl ? dom.inputLambdaUrl.value.trim() : "";
+      saveLambdaUrlPreference(lambdaUrl || "local");
+
+      if (!lambdaUrl) {
+        if (dom.cloudParallelBadge) dom.cloudParallelBadge.classList.add("hidden");
+        const localResult = runMonteCarloSimulation(config);
+        if (reqId !== latestRequestId) return;
+        setCloudStatus("mode-local", `⚡ Motor Local Activo (${fmtDec.format(localResult.elapsedMs)} ms)`);
+        renderAllViews(localResult);
+        syncAuditRecordWithCloud("", buildAuditPayloadFromResult(localResult), notifyUser);
+        return;
+      }
+
+      const willFanOut = config.runs >= 50 && config.runs <= 500;
+      if (dom.cloudParallelBadge) {
+        dom.cloudParallelBadge.classList.toggle("hidden", !willFanOut);
+        if (willFanOut) {
+          dom.cloudParallelBadge.textContent = "⚡ Paralelismo Cloud AWS: 5 Workers Lambda concurrentes";
+        }
+      }
 
       setCloudStatus(
-        "mode-cloud",
+        "mode-loading",
         willFanOut
-          ? `⚡ Paralelismo Cloud AWS: 5 Workers Lambda concurrentes (${Math.round(cloudResult.elapsedMs)} ms)`
-          : `☁️ AWS Lambda Conectado (${Math.round(cloudResult.elapsedMs)} ms)`
+          ? "☁️ Ejecutando Fan-Out (5 Workers AWS Lambda)..."
+          : "☁️ Ejecutando en AWS Lambda..."
       );
 
-      if (cloudResult.auditHistory && cloudResult.auditHistory.length > 0 && !willFanOut) {
-        renderDynamoAuditTable(cloudResult.auditHistory, cloudResult.auditStorageSource);
-      } else {
-        syncAuditRecordWithCloud(lambdaUrl, buildAuditPayloadFromResult(cloudResult));
-      }
-    } catch (_) {
-      if (reqId !== latestRequestId) return;
-      if (dom.cloudParallelBadge) dom.cloudParallelBadge.classList.add("hidden");
-      const fallbackResult = runMonteCarloSimulation(config);
-      renderAllViews(fallbackResult);
-      setCloudStatus(
-        "mode-fallback",
-        `⚡ Fallback Local Instantáneo (${fmtDec.format(fallbackResult.elapsedMs)} ms)`
+      setCloudLoadingOverlay(
+        true,
+        willFanOut
+          ? `⚡ Procesando en Nube AWS... · 5 Workers Lambda concurrentes (${config.runs} corridas)`
+          : `⚡ Procesando en Nube AWS... · Ejecutando ${config.runs} corridas SEIR`
       );
-      syncAuditRecordWithCloud("", buildAuditPayloadFromResult(fallbackResult));
+
+      try {
+        const cloudResult = await requestCloudLambdaSimulation(lambdaUrl, config);
+        if (reqId !== latestRequestId) return;
+
+        renderAllViews(cloudResult);
+
+        if (dom.datasetSourcePill && cloudResult.datasetSource) {
+          dom.datasetSourcePill.textContent = cloudResult.datasetSource.startsWith("s3://")
+            ? "S3 Privado: Conectado"
+            : "Dataset INEC/MSP: Activo";
+        }
+
+        dom.execTimingInfo.textContent = willFanOut
+          ? `⚡ Paralelismo Cloud AWS: 5 Workers Lambda concurrentes · ${Math.round(cloudResult.elapsedMs)} ms`
+          : `☁️ AWS Lambda · ${config.runs} corridas en ${Math.round(cloudResult.elapsedMs)} ms`;
+
+        setCloudStatus(
+          "mode-cloud",
+          willFanOut
+            ? `⚡ Paralelismo Cloud AWS: 5 Workers Lambda concurrentes (${Math.round(cloudResult.elapsedMs)} ms)`
+            : `☁️ AWS Lambda Conectado (${Math.round(cloudResult.elapsedMs)} ms)`
+        );
+
+        if (cloudResult.auditHistory && cloudResult.auditHistory.length > 0 && !willFanOut) {
+          renderDynamoAuditTable(cloudResult.auditHistory, cloudResult.auditStorageSource);
+          showToast(`Guardado en Amazon DynamoDB · Hash <code>${cloudResult.hashHex}</code>`, "success", 3000);
+        } else {
+          syncAuditRecordWithCloud(lambdaUrl, buildAuditPayloadFromResult(cloudResult), notifyUser);
+        }
+      } catch (_) {
+        if (reqId !== latestRequestId) return;
+        if (dom.cloudParallelBadge) dom.cloudParallelBadge.classList.add("hidden");
+        const fallbackResult = runMonteCarloSimulation(config);
+        renderAllViews(fallbackResult);
+        setCloudStatus(
+          "mode-fallback",
+          `⚡ Fallback Local Instantáneo (${fmtDec.format(fallbackResult.elapsedMs)} ms)`
+        );
+        syncAuditRecordWithCloud("", buildAuditPayloadFromResult(fallbackResult), notifyUser);
+      } finally {
+        setCloudLoadingOverlay(false);
+      }
+    } finally {
+      setOperationButtonsBusy(false);
     }
   }
 
@@ -3232,6 +3866,14 @@
     dom.reproBanner.textContent = identical
       ? `✓ Reproducibilidad Exacta Comprobada: Dos ejecuciones independientes de ${config.runs} corridas con mulberry32(${config.seed}), efectividad ${config.vaccineEfficacyPct}% y presupuesto ${formatUSD(config.totalBudget)} produjeron exactamente el mismo Hash FNV-1a (${runA.hashHex}) y ${formatInt(runA.summary.shield.savedStats.mean)} vidas salvadas.`
       : "⚠️ Discrepancia detectada en verificación.";
+
+    showToast(
+      identical
+        ? `Hash FNV-1a validado (<code>${runA.hashHex}</code>) · Reproducibilidad 100%`
+        : "Discrepancia detectada en validación de hashes",
+      identical ? "success" : "warn",
+      3000
+    );
   }
 
   // ============================================================================
@@ -3252,6 +3894,7 @@
 
     updateModeLabelsUI();
     applyConfigToForm(cfg);
+    activeOptimizedPortfolioLabel = "";
     dom.optimizerBanner.classList.add("hidden");
     executeFullSimulation(true);
   }
@@ -3305,12 +3948,22 @@
         useClosure: true
       });
     }
+    activeOptimizedPortfolioLabel = "";
     dom.optimizerBanner.classList.add("hidden");
     applyConfigToForm(base);
     executeFullSimulation(true);
   }
 
   function bindEvents() {
+    if (dom.inputSeed) {
+      const clampSeed = () => {
+        const raw = parseInt(dom.inputSeed.value, 10);
+        dom.inputSeed.value = String(Number.isFinite(raw) ? Math.max(0, Math.min(2147483647, raw)) : DEFAULT_CONFIG.seed);
+      };
+      dom.inputSeed.addEventListener("change", clampSeed);
+      dom.inputSeed.addEventListener("blur", clampSeed);
+    }
+
     syncDualControl(dom.rangeRuns, dom.inputRuns, dom.outRuns, (v) => String(v));
     syncDualControl(dom.rangeDays, dom.inputDays, dom.outDays, (v) => `${v} d`);
     syncDualControl(dom.rangeBeta, dom.inputBeta, dom.outBeta, (v) => Number(v).toFixed(2));
@@ -3352,6 +4005,7 @@
       const cfg = readConfigFromForm();
       cfg.beta = Math.min(2.5, Number((cfg.beta * 2).toFixed(2)));
       applyConfigToForm(cfg);
+      activeOptimizedPortfolioLabel = "";
       dom.optimizerBanner.classList.add("hidden");
       executeFullSimulation(true);
     });
@@ -3361,6 +4015,7 @@
       cfg.totalVaccines = Math.max(500, Math.round(cfg.totalVaccines * 0.5));
       cfg.dailyDoseArrival = Math.max(100, Math.round(cfg.dailyDoseArrival * 0.5));
       applyConfigToForm(cfg);
+      activeOptimizedPortfolioLabel = "";
       dom.optimizerBanner.classList.add("hidden");
       executeFullSimulation(true);
     });
@@ -3370,6 +4025,7 @@
       cfg.patientZeroIndex = 0; // Mercado de Tarqui (Nodo Central Grado 4)
       selectedNodeIndex = 0;
       applyConfigToForm(cfg);
+      activeOptimizedPortfolioLabel = "";
       dom.optimizerBanner.classList.remove("hidden");
       dom.optimizerBanner.innerHTML =
         "🛒 <strong>Foco Central en Mercado de Tarqui Activado:</strong> El algoritmo detecta brote en nodo central de grado 4, aplica Cerco Sanitario + Fumigación en Tarqui y despliega automáticamente el <strong>Anillo Perimetral de Vacunación</strong> en Centro, Terminal, Los Esteros y Hospital.";
@@ -3380,6 +4036,7 @@
       const cfg = readConfigFromForm();
       cfg.vaccineEfficacyPct = 50;
       applyConfigToForm(cfg);
+      activeOptimizedPortfolioLabel = "";
       dom.optimizerBanner.classList.add("hidden");
       executeFullSimulation(true);
     });
@@ -3393,6 +4050,7 @@
         vaccineEfficacyPct: prof.defaultVaccineEfficacy
       });
       selectedNodeIndex = cleanCfg.patientZeroIndex;
+      activeOptimizedPortfolioLabel = "";
       dom.optimizerBanner.classList.add("hidden");
       applyConfigToForm(cleanCfg);
       executeFullSimulation(true);
@@ -3402,9 +4060,40 @@
       runBudgetAutoOptimizer();
     });
 
-    // Selector de Vista del Mapa: Geoespacial GPS vs Grafo Topológico
+    // Selector de Vista del Mapa: Geoespacial GPS vs Grafo Topológico + Controles Flotantes
     dom.btnViewGeo.addEventListener("click", () => setMapView("geo"));
     dom.btnViewTopo.addEventListener("click", () => setMapView("topo"));
+
+    if (dom.btnCenterMapNodes) {
+      dom.btnCenterMapNodes.addEventListener("click", () => {
+        if (activeMapView !== "geo") {
+          setMapView("geo");
+        }
+        recenterAllNodesOnMap();
+      });
+    }
+
+    if (dom.btnToggleBasemap) {
+      dom.btnToggleBasemap.addEventListener("click", (ev) => {
+        if (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+        toggleLeafletBasemap();
+      });
+    }
+
+    if (dom.btnFullscreenMap) {
+      dom.btnFullscreenMap.addEventListener("click", (ev) => {
+        if (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+        toggleMapFullscreen();
+      });
+    }
+    document.addEventListener("fullscreenchange", refreshLeafletAfterFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", refreshLeafletAfterFullscreenChange);
 
     const liveProInputs = [
       dom.rangeEfficacy, dom.inputEfficacy,
@@ -3414,7 +4103,10 @@
       dom.chkUseVaccines, dom.chkUseFumigation, dom.chkUseClosure
     ];
     liveProInputs.forEach((el) => {
-      el.addEventListener("change", () => executeFullSimulation(true));
+      el.addEventListener("change", () => {
+        activeOptimizedPortfolioLabel = "";
+        executeFullSimulation(true);
+      });
     });
 
     document.querySelectorAll(".btn-preset[data-preset]").forEach((btn) => {
@@ -3439,6 +4131,7 @@
       applyConfigToForm(DEFAULT_CONFIG);
       selectedNodeIndex = DEFAULT_CONFIG.patientZeroIndex;
       timelineDay = DEFAULT_CONFIG.days;
+      activeOptimizedPortfolioLabel = "";
       dom.optimizerBanner.classList.add("hidden");
       executeFullSimulation(true);
     });
@@ -3452,6 +4145,7 @@
         navigator.clipboard.writeText(plainTextMayorBrief).then(() => {
           const prev = dom.btnCopyMayorReport.textContent;
           dom.btnCopyMayorReport.textContent = "✓ Informe Copiado";
+          showToast("Informe Ejecutivo para el Alcalde copiado al portapapeles", "success", 3000);
           setTimeout(() => {
             dom.btnCopyMayorReport.textContent = prev;
           }, 1800);
@@ -3541,7 +4235,9 @@
       dom.btnRefreshDynamo.addEventListener("click", async () => {
         const lambdaUrl = dom.inputLambdaUrl ? dom.inputLambdaUrl.value.trim() : "";
         if (!lambdaUrl) {
-          renderDynamoAuditTable(loadLocalAuditMirror(), "local-mirror");
+          const mirror = loadLocalAuditMirror();
+          renderDynamoAuditTable(mirror, "local-mirror");
+          showToast(`Historial local actualizado (${mirror.length} registros)`, "info", 3000);
           return;
         }
         try {
@@ -3556,13 +4252,16 @@
             if (data && typeof data.body === "string") data = JSON.parse(data.body);
             if (data && Array.isArray(data.auditHistory) && data.auditHistory.length > 0) {
               renderDynamoAuditTable(data.auditHistory, data.auditStorageSource);
+              showToast(`Tabla Amazon DynamoDB sincronizada (${data.auditHistory.length} registros)`, "success", 3000);
               return;
             }
           }
         } catch (_) {
           // Respaldo local transparente
         }
-        renderDynamoAuditTable(loadLocalAuditMirror(), "local-mirror");
+        const mirror = loadLocalAuditMirror();
+        renderDynamoAuditTable(mirror, "local-mirror");
+        showToast(`Auditoría sincronizada en espejo resiliente (${mirror.length} registros)`, "info", 3000);
       });
     }
   }
@@ -3576,6 +4275,7 @@
     }
     initStaticMapSkeleton();
     initLeafletGeoMap();
+    initResponsiveChartsAndLayoutObserver();
     bindEvents();
     timelineDay = DEFAULT_CONFIG.days;
     renderDynamoAuditTable(loadLocalAuditMirror(), "local-mirror");

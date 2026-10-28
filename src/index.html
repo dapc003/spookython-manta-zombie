@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer-when-downgrade" />
   <title>Operación Contención Manta · Arquitectura Multicapa AWS (SpookyThon 2026)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -234,8 +235,8 @@
               <output id="outDays" for="rangeDays" class="mono-val">60 d</output>
             </div>
             <div class="dual-input">
-              <input type="range" id="rangeDays" min="15" max="150" step="1" value="60" />
-              <input type="number" id="inputDays" name="days" value="60" min="10" max="365" step="1" required />
+              <input type="range" id="rangeDays" min="10" max="150" step="1" value="60" />
+              <input type="number" id="inputDays" name="days" value="60" min="10" max="150" step="1" required />
             </div>
             <small class="field-help">Duración de la simulación diaria</small>
           </div>
@@ -257,7 +258,7 @@
               <output id="outBeta" for="rangeBeta" class="mono-val">0.72</output>
             </div>
             <div class="dual-input">
-              <input type="range" id="rangeBeta" min="0.10" max="2.20" step="0.01" value="0.72" />
+              <input type="range" id="rangeBeta" min="0.05" max="2.50" step="0.01" value="0.72" />
               <input type="number" id="inputBeta" name="beta" value="0.72" min="0.05" max="2.50" step="0.01" required />
             </div>
             <small class="field-help">Calibrable con clima real Open-Meteo</small>
@@ -270,7 +271,7 @@
               <output id="outIncubation" for="rangeIncubation" class="mono-val">3 d</output>
             </div>
             <div class="dual-input">
-              <input type="range" id="rangeIncubation" min="1" max="14" step="1" value="3" />
+              <input type="range" id="rangeIncubation" min="1" max="30" step="1" value="3" />
               <input type="number" id="inputIncubation" name="incubation" value="3" min="1" max="30" step="1" required />
             </div>
             <small class="field-help" id="incubationHelpText">Latencia 🟡 Mordido &rarr; 🔴 Zombie</small>
@@ -344,7 +345,7 @@
               <output id="outBudget" for="rangeBudget" class="mono-val text-emerald">$50,000</output>
             </div>
             <div class="dual-input">
-              <input type="range" id="rangeBudget" min="0" max="300000" step="1000" value="50000" />
+              <input type="range" id="rangeBudget" min="0" max="2000000" step="1000" value="50000" />
               <input type="number" id="inputBudget" value="50000" min="0" max="2000000" step="500" required />
             </div>
             <small class="field-help">Techo financiero municipal para las 3 acciones</small>
@@ -357,7 +358,7 @@
               <output id="outDailyDoses" for="rangeDailyDoses" class="mono-val">800 /día</output>
             </div>
             <div class="dual-input">
-              <input type="range" id="rangeDailyDoses" min="50" max="4000" step="50" value="800" />
+              <input type="range" id="rangeDailyDoses" min="0" max="20000" step="50" value="800" />
               <input type="number" id="inputDailyDoses" value="800" min="0" max="20000" step="50" required />
             </div>
             <small class="field-help">Ingreso diario a cadena de frío cantonal</small>
@@ -370,7 +371,7 @@
               <output id="outDailyBrigades" for="rangeDailyBrigades" class="mono-val">2 /día</output>
             </div>
             <div class="dual-input">
-              <input type="range" id="rangeDailyBrigades" min="0" max="8" step="1" value="2" />
+              <input type="range" id="rangeDailyBrigades" min="0" max="20" step="1" value="2" />
               <input type="number" id="inputDailyBrigades" value="2" min="0" max="20" step="1" required />
             </div>
             <small class="field-help">Despliegues diarios máx. de fumigación o cerco</small>
@@ -601,10 +602,25 @@
           </div>
         </div>
 
-        <!-- VISTA 1: MAPA GEOESPACIAL REAL CON LEAFLET + CARTODB DARK MATTER -->
+        <!-- VISTA 1: MAPA GEOESPACIAL REAL CON LEAFLET (ESRI CALLES OSCURO + SATÉLITE HÍBRIDO SIN API KEY) -->
         <div id="geoMapContainer" class="geo-map-wrapper">
           <div id="mantaGeoMap" class="manta-leaflet-canvas" role="region" aria-label="Mapa geoespacial GPS real de los 8 nodos de Manta"></div>
+
+          <!-- Botones flotantes rápidos sobre el mapa geoespacial -->
+          <div class="geo-map-floating-controls" role="toolbar" aria-label="Acciones rápidas del mapa de Manta">
+            <button type="button" id="btnCenterMapNodes" class="geo-float-btn" title="Reencuadrar y centrar los 8 barrios de Manta en pantalla">
+              🎯 Centrar 8 Barrios
+            </button>
+            <button type="button" id="btnToggleBasemap" class="geo-float-btn" aria-pressed="false" title="Cambiar entre Mapa Táctico Oscuro de Calles y Satélite Híbrido (Esri ArcGIS)">
+              🛰️ Cambiar Calle / Satélite
+            </button>
+            <button type="button" id="btnFullscreenMap" class="geo-float-btn" aria-pressed="false" title="Ver el mapa geoespacial de Manta en pantalla completa (Esc para salir)">
+              🖥️ Pantalla Completa
+            </button>
+          </div>
+
           <div class="geo-map-overlay-legend">
+            <span id="activeBasemapBadge" class="geo-basemap-badge">🗺️ Calles Táctico Oscuro (Esri)</span>
             <span>🔴 Onda Calor: Infectados</span>
             <span>🚧 Línea Punteada: Cerco (-75%)</span>
             <span>🟢 Línea Esmeralda: Anillo Protegido</span>
@@ -855,6 +871,25 @@ P(Exposición<sub>i,t</sub>) = 1 - exp(-&lambda;<sub>i,t</sub>)   |   &Delta;E<s
     <span>Operación Contención Manta · Arquitectura Multicapa AWS (Lambda Fan-Out &times;5 + S3 KMS + DynamoDB + Open-Meteo) · <code>mulberry32(seed)</code></span>
     <span>INEC / MSP Manta · Vacuna $15 (Solo 🟢 Sanos) · Fumigación $1,200 (-40% / 5d) · Cerco $3,500 (-75% flujo)</span>
   </footer>
+
+  <!-- OVERLAY DE CARGA TÁCTICO: PARALELISMO CLOUD AWS LAMBDA (FAN-OUT x5) -->
+  <div id="cloudLoadingOverlay" class="cloud-loading-overlay hidden" role="status" aria-live="assertive" aria-busy="true">
+    <div class="cloud-loading-card">
+      <div class="radar-spinner" aria-hidden="true">
+        <span class="radar-ring radar-ring-outer"></span>
+        <span class="radar-ring radar-ring-mid"></span>
+        <span class="radar-sweep"></span>
+        <span class="radar-core"></span>
+      </div>
+      <div class="cloud-loading-title">⚡ Procesando en Nube AWS...</div>
+      <div id="cloudLoadingSubtext" class="cloud-loading-sub">
+        5 Workers Lambda concurrentes · Consolidando Monte Carlo SEIR determinista
+      </div>
+    </div>
+  </div>
+
+  <!-- SISTEMA DE NOTIFICACIONES FLOTANTES (TOASTS) -->
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="false"></div>
 
   <script src="./app.js"></script>
 </body>
